@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS 新闻管理面板</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 加入 Three.js 和 Globe.gl -->
+    <script src="https://unpkg.com/three"></script>
+    <script src="https://unpkg.com/globe.gl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="logo">
+            <span class="logo-icon">📡</span>
+            <span class="logo-text">RSS Hub</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#" class="nav-link active" data-page="dashboard">
+                <span class="nav-icon">📊</span><span>仪表盘</span></a></li>
+            <li><a href="#" class="nav-link" data-page="scifi">
+                <span class="nav-icon">🌍</span><span>全域观测台</span></a></li>
+            <li><a href="#" class="nav-link" data-page="feeds">
+                <span class="nav-icon">📋</span><span>源管理</span></a></li>
+            <li><a href="#" class="nav-link" data-page="explorer">
+                <span class="nav-icon">🔍</span><span>新闻查询</span></a></li>
+            <li><a href="#" class="nav-link" data-page="intelligence">
+                <span class="nav-icon">🧠</span><span>情报分析</span></a></li>
+            <li><a href="#" class="nav-link" data-page="timeline">
+                <span class="nav-icon">📜</span><span>事件时间线</span></a></li>
+            <li><a href="#" class="nav-link" data-page="logs">
+                <span class="nav-icon">⏱️</span><span>抓取日志</span></a></li>
+            <li><a href="#" class="nav-link" data-page="database">
+                <span class="nav-icon">🗄️</span><span>数据维护</span></a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="scheduler-badge" id="schedulerBadge">
+                <span class="pulse-dot"></span>
+                <span>调度器运行中</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="content">
+        <section id="page-dashboard" class="page active">
+            <div class="page-header">
+                <h1>仪表盘</h1>
+            </div>
+
+            <!-- 抓取控制中心 -->
+            <div class="card fetch-control-card">
+                <div class="fcc-header">
+                    <div class="fcc-title">
+                        <span class="fcc-icon">🚀</span>
+                        <div class="fcc-labels">
+                            <div class="fcc-main-label">任务补全控制中心</div>
+                            <div class="fcc-sub-label">TEMPORAL CATCH-UP CONSOLE</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="fcc-body">
+                    <div class="fcc-input-group">
+                        <label>同步起点 (Since)</label>
+                        <div class="fcc-input-wrapper">
+                            <input type="datetime-local" id="inputFetchSince" class="input fcc-input" />
+                            <button class="btn btn-secondary btn-sm" id="btnResetSince" title="重置为上次成功时间">
+                                ↺ 重置为上次同步点
+                            </button>
+                        </div>
+                        <div class="fcc-hint">系统将抓取该时间点之后的所有更新。默认为上次成功结束的时间。</div>
+                    </div>
+                    <button class="btn btn-primary fcc-btn" id="btnManualFetch">
+                        <span>⚡</span> 启动立即扫描
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 实时抓取进度 -->
+            <div id="fetchProgressContainer" class="card fetch-progress-card" style="display:none">
+                <div class="progress-info">
+                    <span id="fetchProgressText">正在准备抓取...</span>
+                    <span id="fetchProgressPercent">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="fetchProgressBar" class="progress-bar-fill" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card" onclick="gotoFiltered('total')">
+                    <div class="stat-value" id="statTotal">—</div>
+                    <div class="stat-label">总文章数</div>
+                </div>
+                <div class="stat-card accent" onclick="gotoFiltered('today')">
+                    <div class="stat-value" id="statToday">—</div>
+                    <div class="stat-label">今日新增</div>
+                </div>
+                <div class="stat-card" onclick="gotoFiltered('week')">
+                    <div class="stat-value" id="statWeek">—</div>
+                    <div class="stat-label">本周新增</div>
+                </div>
+                <div class="stat-card" onclick="gotoFiltered('last_fetch')">
+                    <div class="stat-value" id="statLastFetch">—</div>
+                    <div class="stat-label">上次抓取</div>
+                </div>
+                <div class="stat-card">
+                    <div id="statNextFetch" style="font-size: 24px; font-weight: 700; margin-bottom: 4px;">—</div>
+                    <div class="stat-label" id="statNextReason">下次预定</div>
+                </div>
+            </div>
+            <div class="charts-row">
+                <div class="card chart-card">
+                    <h3>各媒体源文章数</h3>
+                    <div class="chart-container">
+                        <canvas id="mediaChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>最近抓取记录</h3>
+                    <div id="recentFetchList" class="fetch-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-scifi" class="page">
+            <!-- 全屏背景 3D 球体 -->
+            <div id="globeContainer" style="width: 100%; height: 100%; position: absolute; z-index: 1; top: 0; left: 0;"></div>
+            
+            <!-- 流星动画层 -->
+            <div id="shootingStarsLayer" style="position: absolute; overflow: hidden; pointer-events: none; width: 100%; height: 100%; z-index: 2; top:0; left:0;"></div>
+            
+            <!-- 顶部控制悬浮窗 (HUD) -->
+            <div class="hud-top">
+                <div class="hud-banner">
+                    <span style="color: #00f3ff; font-weight:800; font-size:18px;">STARLINK RSS COMMAND</span>
+                    <div style="font-size:12px; color:rgba(255,255,255,0.5); margin-top:2px;">实时全域数据监测舰桥</div>
+                </div>
+                <button class="btn btn-hud-action glow-btn" id="btnScifiFetch">
+                    <span class="btn-icon">⚡</span>启动区域扫描
+                </button>
+            </div>
+            
+            <div id="scifiProgressContainer" class="card fetch-progress-card sci-fi-progress" style="display:none; z-index: 10;">
+                <div class="progress-info">
+                    <span id="scifiProgressText">序列化协议准备中...</span>
+                    <span id="scifiProgressPercent">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="scifiProgressBar" class="progress-bar-fill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- 右侧实时滚动信息面板 -->
+            <div class="live-feed-panel" id="liveFeedPanel">
+                <div class="lf-header">
+                    <div class="lf-title"><span style="color:#00f3ff; margin-right:8px;">●</span>实时解析流</div>
+                    <div class="pulse-indicator"></div>
+                </div>
+                <div id="liveFeedList" class="live-feed-list"></div>
+            </div>
+        </section>
+
+        <!-- 源管理 -->
+        <section id="page-feeds" class="page">
+            <div class="page-header">
+                <h1>源管理</h1>
+                <div class="header-actions">
+                    <div class="interval-setting">
+                        <label>
+                            <input type="checkbox" id="checkAutoFetch"> 开启自动抓取
+                        </label>
+                        <label style="margin-left:10px;">间隔 (分):</label>
+                        <input type="number" id="inputInterval" class="input input-sm" style="width: 60px" value="60" />
+                        <button class="btn btn-secondary btn-sm" id="btnSetInterval">保存配置</button>
+                    </div>
+                    <button class="btn btn-primary" id="btnAddFeed">
+                        <span>＋</span> 添加源
+                    </button>
+                </div>
+            </div>
+            <div id="feedsContainer" class="feeds-container">
+                <!-- Grouped feeds will be injected here -->
+            </div>
+        </section>
+
+        <!-- 新闻查询 -->
+        <section id="page-explorer" class="page">
+            <div class="page-header">
+                <h1>新闻查询</h1>
+            </div>
+            <div class="card search-card" style="margin-bottom: 20px;">
+                <div class="search-form">
+                    <div class="search-row">
+                        <input type="text" id="searchKeyword" class="input" placeholder="搜索关键词 (支持模糊查询)..." style="flex:2">
+                        <select id="searchMedia" class="input" style="flex:1">
+                            <option value="">全部媒体分类</option>
+                        </select>
+                        <select id="searchPlatform" class="input" style="flex:1">
+                            <option value="">全部具体源</option>
+                        </select>
+                        <select id="searchCountry" class="input" style="flex:1">
+                            <option value="">全部国家/地区</option>
+                        </select>
+                    </div>
+                    <div class="search-row" style="margin-top:10px; display:flex; gap:10px;">
+                        <select id="searchPeriod" class="input" style="flex:1">
+                            <option value="">所有时间跨度</option>
+                            <option value="day">最近 24 小时</option>
+                            <option value="week">最近一周</option>
+                            <option value="month">最近一月</option>
+                        </select>
+                        <input type="number" id="searchHours" class="input" placeholder="近 N 小时" style="flex:0.5">
+                        <button class="btn btn-primary" id="btnSearch" style="flex:1">
+                            <span>🔍</span> 搜索相关新闻事件
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="resultCount" style="margin-bottom:12px; font-size:13px; color:var(--text-secondary); font-weight:500;">
+                请输入搜索条件以开始您的研究。
+            </div>
+            
+            <div id="articlesList" class="articles-list">
+                <!-- 文章列表 -->
+                <div class="empty-state">
+                    <div class="icon">📡</div>
+                    等待分析指令...
+                </div>
+            </div>
+            <div id="pagination" class="pagination"></div>
+        </section>
+        <!-- 新闻研究中心 (原情报分析) -->
+        <section id="page-intelligence" class="page">
+            <div class="page-header">
+                <h1>新闻研究中心</h1>
+                <div class="header-actions">
+                    <select id="intelProvider" class="input" style="width:130px; font-weight:600; border-color:var(--accent);">
+                        <option value="volcengine" selected>豆包 (Ark)</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="qwen3.5-plus">Qwen 3.5 Plus</option>
+                        <option value="glm-5">GLM 5</option>
+                        <option value="glm-4.7">GLM 4.7</option>
+                        <option value="kimi-k2.5">Kimi K2.5</option>
+                        <option value="MiniMax-M2.5">MiniMax M2.5</option>
+                    </select>
+                    <select id="intelPeriod" class="input">
+                        <option value="min30">最近 30 分钟</option>
+                        <option value="hour1">最近 1 小时</option>
+                        <option value="hour2">最近 2 小时</option>
+                        <option value="day" selected>今日热点 (24h)</option>
+                        <option value="week">本周回顾</option>
+                        <option value="month">本月洞察</option>
+                        <option value="custom">📅 自定义时间段</option>
+                    </select>
+
+                    <div id="intelCustomRange" style="display:none; align-items:center; gap:8px;">
+                        <input type="datetime-local" id="intelStart" class="input" style="width: 175px">
+                        <span style="color:var(--text-secondary)">至</span>
+                        <input type="datetime-local" id="intelEnd" class="input" style="width: 175px">
+                    </div>
+
+                    <button class="btn btn-primary" id="btnStartAnalyze">
+                        <span>🔍</span> 启动分析
+                    </button>
+                </div>
+            </div>
+            
+            <div class="intel-page">
+                <aside class="intel-sidebar">
+                    <h3>🔥 自动聚合热点</h3>
+                    <div id="hotEventsContainer">
+                        <!-- 聚合事件卡片 -->
+                    </div>
+                </aside>
+                
+                <main class="intel-main">
+                    <div class="writing-workbench">
+                        <h3 style="margin-bottom:10px;">🛠️ 情报分析工作台</h3>
+                        <div style="font-size:12px; color:var(--text-secondary);">已选择用于分析的文章：</div>
+                        <div id="workbenchList" class="workbench-list">
+                            <!-- 选中的文章标签 -->
+                            <div class="empty-state" style="padding:10px;">尚未选择素材，请前往“新闻查询”勾选</div>
+                        </div>
+                        
+                        <div style="margin-top:20px;">
+                            <label style="font-size:12px; font-weight:600; margin-bottom:8px; display:block;">自定义分析指令 (可选):</label>
+                            <textarea id="intelCustomPrompt" class="intel-editor" placeholder="例如：重点关注对半导体行业的影响..."></textarea>
+                        </div>
+                        
+                        <div style="margin-top:15px; display:flex; gap:10px;">
+                            <button class="btn btn-primary" id="btnWriteReport" style="flex:1;">
+                                🚀 开始专家级情报撰写
+                            </button>
+                            <button class="btn btn-secondary" id="btnClearWorkbench">清空素材</button>
+                        </div>
+                    </div>
+                    
+                    <div id="reportContainer" class="report-viewer" style="display:none;">
+                        <!-- 生成的报告 Markdown 内容 -->
+                    </div>
+                </main>
+            </div>
+        </section>
+
+        <!-- 事件时间线 -->
+        <section id="page-timeline" class="page">
+            <div class="page-header">
+                <h1>事件时间线</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="btnCreateTimeline">
+                        <span>📜</span> 从选中的文章创建时间线
+                    </button>
+                </div>
+            </div>
+
+            <div class="timeline-page">
+                <!-- 左侧: 时间线列表 -->
+                <aside class="timeline-sidebar">
+                    <h3>我的时间线</h3>
+                    <div id="timelineList" class="timeline-list">
+                        <div class="empty-state" style="padding: 20px;">
+                            <div class="icon">📜</div>
+                            暂无时间线，请先选择相关新闻创建
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- 右侧: 时间线详情 -->
+                <main class="timeline-main">
+                    <div id="timelineDetail" class="timeline-detail" style="display:none;">
+                        <!-- 时间线标题与概述 -->
+                        <div class="timeline-header">
+                            <h2 id="tlTitle"></h2>
+                            <div class="tl-meta">
+                                <span id="tlKeywords"></span>
+                                <span id="tlCreatedAt"></span>
+                                <span id="tlStatus"></span>
+                            </div>
+                            <div class="tl-summary" id="tlSummary"></div>
+                        </div>
+
+                        <!-- 时间轴可视化 -->
+                        <div id="timelineAxis" class="timeline-axis">
+                            <!-- 事件节点按时间排列 -->
+                        </div>
+
+                        <!-- 跟踪控制 -->
+                        <div class="timeline-actions">
+                            <button class="btn btn-primary" id="btnTrackUpdate">🔄 检查最新进展</button>
+                            <button class="btn btn-secondary" id="btnExportTimeline">📥 导出时间线</button>
+                            <button class="btn btn-secondary" id="btnArchiveTimeline">📁 归档</button>
+                            <button class="btn btn-danger" id="btnDeleteTimeline">🗑️ 删除</button>
+                        </div>
+                    </div>
+
+                    <div id="timelineEmpty" class="empty-state" style="padding: 60px;">
+                        <div class="icon" style="font-size: 48px;">📜</div>
+                        <div style="margin-top: 16px; color: var(--text-secondary);">
+                            请先在"新闻查询"中选择相关事件文章，然后点击上方按钮创建时间线
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </section>
+
+        <!-- 抓取日志 -->
+        <section id="page-logs" class="page">
+            <div class="page-header">
+                <h1>抓取日志</h1>
+                <button class="btn btn-secondary" id="btnRefreshLogs">🔄 刷新</button>
+            </div>
+            <div class="card">
+                <div class="fetch-status-bar" id="fetchStatusBar">
+                    <div class="status-item">
+                        <span class="status-label">调度器</span>
+                        <span class="status-value" id="logSchedulerStatus">—</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">间隔</span>
+                        <span class="status-value" id="logInterval">—</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">上次运行</span>
+                        <span class="status-value" id="logLastRun">—</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">下次运行</span>
+                        <span class="status-value" id="logNextRun">—</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">当前状态</span>
+                        <span class="status-value" id="logFetching">—</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <table class="data-table" id="logsTable">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>状态</th>
+                            <th>耗时</th>
+                            <th>源总数</th>
+                            <th>新增文章</th>
+                            <th>原始文章</th>
+                            <th>详情</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 数据维护 -->
+        <section id="page-database" class="page">
+            <div class="page-header">
+                <h1>数据维护</h1>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="dbTotal">—</div>
+                    <div class="stat-label">总记录数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="dbEarliest">—</div>
+                    <div class="stat-label">最早记录</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="dbLatest">—</div>
+                    <div class="stat-label">最新记录</div>
+                </div>
+            </div>
+            <div class="card">
+                <h3>清理旧数据</h3>
+                <div class="filter-row">
+                    <input type="date" id="cleanupDate" class="input" />
+                    <button class="btn btn-danger" id="btnCleanup">删除日期前数据</button>
+                </div>
+                <p class="hint" id="cleanupResult"></p>
+                <div style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+                    <button class="btn btn-danger" id="btnClearAll" style="width: 100%;">🚨 一键清空全库内容并重新抓取</button>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px; text-align: center;">此操作将永久删除当前所有文章与历史记录并立即开始扫描</div>
+                </div>
+            </div>
+            <div class="card">
+                <h3>各媒体源记录数</h3>
+                <div id="mediaBreakdown" class="media-breakdown"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 模态框 -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">添加源</h2>
+                <button class="modal-close" id="modalClose">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="feedEditIdx" value="-1" />
+                <div class="form-group">
+                    <label>RSS URL</label>
+                    <input type="text" id="feedUrl" class="input" placeholder="https://rss.app/feeds/..." />
+                </div>
+                <div class="form-group">
+                    <label>平台名称</label>
+                    <input type="text" id="feedPlatform" class="input" placeholder="联合早报|国际新闻" />
+                </div>
+                <div class="form-group">
+                    <label>媒体组</label>
+                    <input type="text" id="feedMediaGroup" class="input" placeholder="联合早报" />
+                </div>
+                <div class="form-group">
+                    <label>国家/地区</label>
+                    <input type="text" id="feedCountry" class="input" placeholder="美国 / 日本 / 新加坡 等" />
+                </div>
+                <div class="form-group">
+                    <label>所在城市 (用于地图经纬度)</label>
+                    <input type="text" id="feedCity" class="input" placeholder="新加坡 (或留空则自动映射)" />
+                </div>
+                <div class="form-group">
+                    <label>网页直采 URL (可选，针对无 RSS 或需全文的源)</label>
+                    <input type="text" id="feedScrapeUrl" class="input" placeholder="https://www.zaobao.com.sg/..." />
+                </div>
+                <div class="form-group">
+                    <label>超时 (秒)</label>
+                    <input type="number" id="feedTimeout" class="input" value="30" />
+                </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="feedTimeOnly" />
+                        仅时间增量（不参与关键字过滤）
+                    </label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="feedFetchJina" />
+                        启用 Jina AI 正文抓取（通用全文提取）
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modalCancel">取消</button>
+                <button class="btn btn-primary" id="modalSave">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 详情模态框 -->
+    <div class="modal-overlay" id="detailModal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h2 id="detailTitle">抓取详情</h2>
+                <button class="modal-close" onclick="document.getElementById('detailModal').classList.remove('active')">✕</button>
+            </div>
+            <div class="modal-body">
+                <pre id="detailContent" class="log-detail-pre"></pre>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('detailModal').classList.remove('active')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文章正文模态框 -->
+    <div class="modal-overlay" id="contentModal">
+        <div class="modal" style="max-width: 800px; width: 90%;">
+            <div class="modal-header">
+                <h2 id="contentTitle" style="font-size: 16px; margin: 0; padding-right: 20px;">正文内容</h2>
+                <button class="modal-close" id="contentModalClose" onclick="document.getElementById('contentModal').classList.remove('active')">✕</button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <div id="contentMarkdown" style="white-space: pre-wrap; font-family: inherit; line-height: 1.6; color: var(--text-primary); font-size: 14px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('contentModal').classList.remove('active')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 浮动操作栏 (用于多选) -->
+    <div id="floatingActionBar" class="floating-action-bar" style="display:none;">
+        <button class="btn btn-primary fab-btn" id="btnSubmitToIntel">
+            ⚡ 提交至情报工作台 (<span id="selectedCount">0</span>)
+        </button>
+        <button class="btn btn-secondary fab-btn" id="btnCancelSelect">取消选择</button>
+    </div>
+
+    <script src="app.js?v=20260331"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/hotspot_detector.py --hours 24 --max 10)",
+      "Bash(curl -s \"http://localhost:5001/api/intelligence/hot?period=day&fast=true\")",
+      "Bash(python -c \" import sys,json d=json.load\\(sys.stdin\\) e=d.get\\('events',[]\\) print\\(f'Total events: {len\\(e\\)}'\\) if e: items = e[0].get\\('items', []\\) print\\(f'First event items: {len\\(items\\)}'\\) if items: print\\('Items data example:'\\) for i in items[:2]: print\\(f' - id={i.get\\(\\\\\"id\\\\\"\\)}, platform={i.get\\(\\\\\"platform\\\\\"\\)}, title={i.get\\(\\\\\"title\\\\\",\\\\\"\\\\\"\\)[:40]}'\\) \")",
+      "Bash(python scripts/hotspot_detector.py --hours 24 --max 3)",
+      "Bash(python scripts/hotspot_detector.py --hours 6 --max 5)",
+      "Bash(python scripts/hotspot_detector.py --hours 24 --max 5)",
+      "Bash(chcp 65001)",
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/hotspot_detector.py --hours 24 --max 3)",
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/hotspot_detector.py --hours 24 --max 2 --json)",
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/hotspot_detector.py --hours 24 --max 3 --json)"
+    ]
+  }
+}
