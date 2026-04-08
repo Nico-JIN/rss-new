@@ -202,6 +202,8 @@ def cmd_search(args):
         start = None
         end = None
 
+    hours = args.hours or 24
+
     conn = get_conn()
     init_db(conn)
 
@@ -215,18 +217,29 @@ def cmd_search(args):
     )
     conn.close()
 
-    # 2. 调用外部搜索引擎 (Google News, Twitter, Tavily 等)
+    # 2. 调用外部搜索引擎
     if not getattr(args, 'no_external', False):
         try:
             searcher = UnifiedSearcher()
-            # 默认源：Google News, Brave, Twitter (视 Key 决定)
-            sources = ['google_news', 'brave', 'twitter', 'tavily']
-            ext_results = searcher.search(args.keyword, sources=sources, max_results=30)
-            
+            # 解析外部引擎参数
+            if args.external:
+                sources = [s.strip() for s in args.external.split(',')]
+            else:
+                sources = ['google_news', 'brave', 'twitter', 'tavily']
+
+            # 智能关键字优化
+            ext_results = searcher.search(
+                args.keyword,
+                sources=sources,
+                max_results=args.ext_limit or 30,
+                hours=hours,
+                optimize_keyword=True
+            )
+
             # --- 新增：强制翻译外部内容 ---
             _translate_ext_results(ext_results)
             # --------------------------
-            
+
             items.extend(ext_results)
             # 入库机制: 存储新抓取的外部条目
             valid_ext = [r for r in ext_results if not is_chinese_media(r.get('platform', r.get('source', '')), r.get('url', ''))]
@@ -242,7 +255,7 @@ def cmd_search(args):
         # 统一格式处理
         platform = item.get('platform', item.get('source', ''))
         url = item.get('url', '')
-        
+
         # 强制过滤中国媒体
         if is_chinese_media(platform, url):
             continue
@@ -258,8 +271,10 @@ def cmd_search(args):
             'keyword': args.keyword,
             'start': start,
             'end': end,
+            'hours': hours,
             'media': args.media,
             'country': args.country,
+            'external_sources': args.external.split(',') if args.external else None,
             'generated_at': now.isoformat(),
         },
         'count': len(unique),
@@ -668,12 +683,14 @@ def main():
     # search
     p_search = sub.add_parser('search', help='关键字+时间搜索')
     p_search.add_argument('--keyword', type=str, required=True, help='搜索关键字')
-    p_search.add_argument('--hours', type=float, help='最近 N 小时')
+    p_search.add_argument('--hours', type=float, default=24, help='时间窗口（小时），默认24')
     p_search.add_argument('--start', type=str, help='起始时间 (ISO)')
     p_search.add_argument('--end', type=str, help='结束时间 (ISO)')
     p_search.add_argument('--media', type=str, help='媒体组过滤')
     p_search.add_argument('--country', type=str, help='国家过滤')
-    p_search.add_argument('--limit', type=int, default=200, help='最大条数')
+    p_search.add_argument('--limit', type=int, default=200, help='本地库最大条数')
+    p_search.add_argument('--external', type=str, help='外部搜索引擎（逗号分隔）: google_news,bing_news,newsapi,tavily,brave,twitter')
+    p_search.add_argument('--ext-limit', type=int, default=30, help='每个外部引擎最大结果数')
     p_search.add_argument('--with-content', action='store_true', help='包含全文')
 
     # hotspot

@@ -1953,7 +1953,7 @@ def api_v2_search_unified():
             searcher = UnifiedSearcher()
 
             def search_external(source):
-                return searcher.search(keyword, sources=[source], max_results=limit)
+                return searcher.search(keyword, sources=[source], max_results=limit, hours=hours)
 
             for source in external_sources:
                 futures[executor.submit(search_external, source)] = source
@@ -1986,12 +1986,34 @@ def api_v2_search_unified():
     main_media_results.sort(key=lambda x: x.get('published', ''), reverse=True)
     web_supplement_results.sort(key=lambda x: x.get('published', ''), reverse=True)
 
+    # 过滤无效结果：没有 URL 或 URL 无效
+    def has_valid_url(item: dict) -> bool:
+        """检查是否有有效的 URL"""
+        url = item.get('url', '')
+        if not url:
+            return False
+        # 过滤掉 Google/Bing 内部聚合页面
+        invalid_prefixes = [
+            'https://news.google.com/',
+            'https://www.google.com/',
+            'https://www.bing.com/',
+            'https://bing.com/'
+        ]
+        for prefix in invalid_prefixes:
+            if url.startswith(prefix):
+                return False
+        return True
+
+    # 先过滤无效 URL
+    web_supplement_results = [item for item in web_supplement_results if has_valid_url(item)]
+
     # 外部引擎结果按时间段过滤（剔除超出时间窗口的结果）
     def is_within_time_window(published_str: str) -> bool:
         """检查发布时间是否在时间窗口内"""
         if not published_str:
-            # 无时间信息，默认保留（可能是最新结果）
-            return True
+            # 无时间信息，对于短时间窗口（<24h）默认过滤掉
+            # 因为这些结果可能是旧文章
+            return hours >= 24
         try:
             # 解析 ISO 格式时间
             pub_dt = datetime.fromisoformat(published_str.replace('Z', '+00:00'))
@@ -2002,8 +2024,8 @@ def api_v2_search_unified():
             # 检查是否在时间窗口内
             return pub_dt >= (now - timedelta(hours=hours))
         except Exception:
-            # 解析失败，默认保留
-            return True
+            # 解析失败，对于短时间窗口默认过滤
+            return hours >= 24
 
     # 过滤外部结果
     filtered_web_results = [item for item in web_supplement_results

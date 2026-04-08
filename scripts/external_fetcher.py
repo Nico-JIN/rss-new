@@ -27,11 +27,35 @@ TZ_BJ = timezone(timedelta(hours=8))
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 中国媒体过滤列表
+# 中国大陆媒体过滤列表（不含港澳台）
 # ═══════════════════════════════════════════════════════════════════
 
-CHINA_MEDIA_PATTERNS = [
-    # 官方媒体
+# 港澳台媒体白名单（这些媒体保留，不过滤）
+HK_MACAU_TAIWAN_WHITELIST = [
+    # 香港媒体
+    r'scmp', r'scmp\.com', r'south china morning post', r'南华早报',
+    r'hket', r'hong kong economic times', r'香港經濟日報',
+    r'thestandard\.hk', r'the standard',
+    r'epochtimes\.hk',  # 香港大纪元
+    # 澳门媒体
+    r'macaudaily', r'澳門日報', r'澳门日报',
+    r'macaunews',
+    # 台湾媒体（自由媒体）
+    r'taipeitimes', r'taipei times',  # 台北时报
+    r'chinapost', r'china post',  # 中国邮报(台湾)
+    r'udn\.com', r'udn', r'联合报', r'聯合報', r'联合新闻网',
+    r'ltn\.com\.tw', r'liberty times', r'自由时报', r'自由時報',
+    r'appledaily\.tw', r'apple daily', r'蘋果日報', r'苹果日报',
+    r'ettoday\.net', r'ettoday', r'东森新闻',
+    r'cna\.com\.tw', r'central news agency', r'中央社',  # 台湾中央社
+    r'tvbs\.com\.tw', r'tvbs',
+    r'businessweekly\.com\.tw',
+    r'cw\.com\.tw', r'commonwealth', r'天下杂志',
+    r'newtalk\.tw',
+]
+
+# 大陆官方媒体
+MAINLAND_OFFICIAL_MEDIA = [
     r'xinhua', r'新华社', r'新華社',
     r'people\.cn', r'people\.com', r'人民日报', r'人民日報',
     r'cctv', r'央视', r'央視', r'中央电视',
@@ -46,66 +70,104 @@ CHINA_MEDIA_PATTERNS = [
     r'bjnews\.com\.cn', r'新京报',
     r'beijingreview', r'北京周报',
     r'cgtn', r'中国国际电视',
+    r'chinanews', r'中新社',  # 大陆中新社
+    r'youth\.cn', r'中国青年',
+    r'mil\.cn', r'中国军网',
+    r'dzwww\.com', r'大众网',
+    r'ecns', r'ecns\.cn',  # 中国新闻网英文
+    r'shine\.cn',  # 上海日报
+]
 
-    # 主要门户网站
-    r'sina\.com', r'新浪',
+# 大陆商业媒体/门户网站
+MAINLAND_COMMERCIAL_MEDIA = [
+    r'sina\.com\.cn', r'新浪',  # 注意：sina\.com 可能匹配香港，用\.cn 更精确
     r'qq\.com', r'tencent', r'腾讯', r'騰訊',
     r'sohu\.com', r'搜狐',
     r'163\.com', r'netease', r'网易', r'網易',
-    r'ifeng\.com', r'凤凰', r'鳳凰',
+    r'ifeng\.com', r'凤凰', r'鳳凰',  # 凤凰网是大陆的
     r'eastday\.com', r'东方网', r'東方網',
     r'zhongguo\.com\.cn',
-
-    # 地方媒体
     r'bjd\.com\.cn',
     r'shnews\.net', r'shanghai',
     r'scuttle\.com',
     r'sznews\.com',
-
-    # 香港/澳门媒体 (按用户需求过滤)
-    r'takungpao', r'大公報', r'大公报',
-    r'wenweipo', r'文匯報', r'文汇报',
-    r'orientaldaily', r'東方日報', r'东方日报',
-    r'thetrue\.hk',
-    r'macaudaily', r'澳門日報', r'澳门日报',
-    r'scmp', r'scmp\.com', r'south china morning post', r'南华早报',
-
-    # 其他常见中国媒体域名和关键词
-    r'\.cn$',  # 中国域名后缀
-    r'chinanews', r'中新社', r'china news',
-    r'china-.\.com',
-    r'youth\.cn', r'中国青年',
-    r'mil\.cn', r'中国军网',
-    r'dzwww\.com', r'大众网',
-
-    # 更多中国媒体名称（英文）
-    r'ecns', r'ecns\.cn',  # 中国新闻网英文
-    r'shine\.cn',  # 上海日报
-    r'taipeitimes', r'taipei times',  # 台北时报
-    r'chinapost', r'china post',  # 中国邮报(台湾)
 ]
 
-def is_china_media(source_name: str, url: str = '') -> bool:
+# 香港左派媒体（亲大陆，需要过滤）
+HK_PRO_CHINA_MEDIA = [
+    r'takungpao', r'ta\s*kung\s*pao', r'大公報', r'大公报',
+    r'wenweipo', r'wen\s*wei\s*po', r'文匯報', r'文汇报',
+    r'orientaldaily', r'oriental\s*daily', r'東方日報', r'东方日报',  # 香港东方日报（亲中）
+    r'thetrue\.hk',
+]
+
+# 合并所有需要过滤的大陆媒体（含香港左派媒体）
+CHINA_MEDIA_PATTERNS = MAINLAND_OFFICIAL_MEDIA + MAINLAND_COMMERCIAL_MEDIA + HK_PRO_CHINA_MEDIA
+
+
+def is_hk_macau_taiwan_media(source_name: str, url: str = '') -> bool:
     """
-    检测是否为中国媒体
-
-    Args:
-        source_name: 媒体名称
-        url: 文章URL（可选，用于更精确判断）
-
-    Returns:
-        True 如果是中国媒体
+    检测是否为港澳台自由媒体（白名单）
+    这些媒体应该保留，不过滤
     """
     if not source_name and not url:
         return False
 
     combined = f"{source_name} {url}".lower()
 
-    for pattern in CHINA_MEDIA_PATTERNS:
+    for pattern in HK_MACAU_TAIWAN_WHITELIST:
         if re.search(pattern, combined, re.IGNORECASE):
             return True
 
     return False
+
+
+def is_mainland_china_media(source_name: str, url: str = '') -> bool:
+    """
+    检测是否为中国大陆媒体（不含港澳台）
+
+    Args:
+        source_name: 媒体名称
+        url: 文章URL（可选，用于更精确判断）
+
+    Returns:
+        True 如果是大陆媒体
+    """
+    if not source_name and not url:
+        return False
+
+    combined = f"{source_name} {url}".lower()
+
+    # 先检查是否在港澳台白名单中
+    if is_hk_macau_taiwan_media(source_name, url):
+        return False
+
+    # 检查是否匹配大陆媒体
+    for pattern in CHINA_MEDIA_PATTERNS:
+        if re.search(pattern, combined, re.IGNORECASE):
+            return True
+
+    # 检查 .cn 域名（但排除明显是港澳台的）
+    # 注意：台湾常用 .tw, .com.tw，香港常用 .hk
+    if re.search(r'\.cn$', combined):
+        # .cn 域名通常是大陆的，除非在白名单中
+        return True
+
+    return False
+
+
+def is_china_media(source_name: str, url: str = '') -> bool:
+    """
+    检测是否为中国媒体（兼容旧接口，现在只过滤大陆媒体）
+
+    Args:
+        source_name: 媒体名称
+        url: 文章URL（可选，用于更精确判断）
+
+    Returns:
+        True 如果是中国大陆媒体（港澳台媒体返回 False）
+    """
+    return is_mainland_china_media(source_name, url)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -849,7 +911,7 @@ class NewsAPIFetcher(ExternalFetcher):
     SOURCE_TYPE = "newsapi"
     ENDPOINT = "https://newsapi.org/v2/everything"
 
-    def search(self, query: str, max_results: int = 20) -> List[Dict]:
+    def search(self, query: str, max_results: int = 20, hours: int = None) -> List[Dict]:
         if not self.api_key:
             print(f"[WARN] NewsAPI: 无 API Key")
             return []
@@ -862,6 +924,13 @@ class NewsAPIFetcher(ExternalFetcher):
                 'language': 'en',
                 'apiKey': self.api_key
             }
+
+            # NewsAPI 支持时间参数
+            if hours:
+                now = datetime.now(TZ_BJ)
+                start = now - timedelta(hours=hours)
+                params['from'] = start.strftime('%Y-%m-%dT%H:%M:%S')
+                params['to'] = now.strftime('%Y-%m-%dT%H:%M:%S')
 
             resp = requests.get(self.ENDPOINT, params=params, timeout=15)
 
@@ -999,6 +1068,16 @@ class GoogleNewsFetcher(ExternalFetcher):
             results = []
 
             for item in data.get('news_results', []):
+                # 过滤掉无效结果：
+                # 1. 没有链接的（如聚合卡片 "News about...")
+                # 2. 链接是 Google 内部页面的
+                link = item.get('link', '')
+                if not link:
+                    continue
+                if link.startswith('https://news.google.com/') or link.startswith('https://www.google.com/'):
+                    # 跳过 Google 内部聚合页面
+                    continue
+
                 source_obj = item.get('source', {})
                 source_name = source_obj.get('name', 'Google News') if isinstance(source_obj, dict) else str(source_obj)
                 if not source_name:
@@ -1006,7 +1085,7 @@ class GoogleNewsFetcher(ExternalFetcher):
 
                 raw = {
                     'title': item.get('title', ''),
-                    'url': item.get('link', ''),
+                    'url': link,
                     'published': item.get('date', ''),
                     'source': source_name,
                     'summary': item.get('snippet', ''),
@@ -1086,14 +1165,17 @@ class UnifiedSearcher:
 
         return fetcher_class(api_key=api_key, config=config)
 
-    def search(self, query: str, sources: List[str] = None, max_results: int = 20) -> List[Dict]:
+    def search(self, query: str, sources: List[str] = None, max_results: int = 20,
+               hours: int = 24, optimize_keyword: bool = True) -> List[Dict]:
         """
         多源并发搜索
 
         Args:
             query: 搜索关键词
-            sources: 搜索源列表（默认 ['google_news', 'brave']）
+            sources: 搜索源列表（默认 ['google_news']）
             max_results: 每个源的最大结果数
+            hours: 时间窗口（小时），用于关键字优化
+            optimize_keyword: 是否智能优化关键字
 
         Returns:
             合并后的结果列表（已去重）
@@ -1109,7 +1191,32 @@ class UnifiedSearcher:
             if not fetcher:
                 continue
 
-            results = fetcher.search(query, max_results)
+            # 智能关键字优化
+            search_query = query
+            time_filter = None
+
+            if optimize_keyword and hours:
+                try:
+                    from search_keyword_optimizer import optimize_search_query, get_engine_type
+                    opt_result = optimize_search_query(
+                        keyword=query,
+                        hours=hours,
+                        engine=source,
+                        use_llm=False  # 暂时不用LLM，避免延迟
+                    )
+                    search_query = opt_result.get('optimized_keyword', query)
+                    time_filter = opt_result.get('time_filter')
+                    print(f"[INFO] {source}: 关键字优化 '{query}' -> '{search_query}'")
+                except Exception as e:
+                    print(f"[WARN] 关键字优化失败: {e}")
+
+            # 根据引擎类型决定是否传递 hours 参数
+            engine_type = get_engine_type(source) if optimize_keyword else 'search_engine'
+            if engine_type == 'news_aggregator' and hours:
+                # NewsAPI 等支持时间参数的引擎
+                results = fetcher.search(search_query, max_results, hours=hours)
+            else:
+                results = fetcher.search(search_query, max_results)
 
             # 去重
             for r in results:
