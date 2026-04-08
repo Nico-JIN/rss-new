@@ -23,5 +23,17 @@
     "google_custom_key": "",
     "_google_custom_comment": "Google Custom Search API密钥。获取地址: https://developers.google.com/custom-search/v1/introduction (免费100次/天)",
     "google_custom_cx": "",
-    "_google_custom_cx_comment": "Google Custom Search Engine ID。创建地址: https://cse.google.com/cse/all"
+    "_google_custom_cx_comment": "Google Custom Search Engine ID。创建地址: https://cse.google.com/cse/all",
+
+    "_local_llm_section": "本地LLM 模型配置 (Ollama / LM Studio)",
+    "local_llm_provider": "ollama",
+    "_local_llm_provider_comment": "本地模型提供者: ollama 或 lmstudio。Mac用户推荐 lmstudio",
+    "ollama_base_url": "http://localhost:11434",
+    "_ollama_base_url_comment": "Ollama 服务地址，默认端口 11434",
+    "ollama_model": "qwen2.5:7b",
+    "_ollama_model_comment": "Ollama 模型名称，推荐 qwen2.5:7b 或 llama3.1:8b",
+    "lmstudio_base_url": "http://localhost:1234",
+    "_lmstudio_base_url_comment": "LM Studio 服务地址，默认端口 1234。Mac本地推理推荐",
+    "lmstudio_model": "",
+    "_lmstudio_model_comment": "LM Studio 模型名称（可选，默认使用已加载的模型）"
 }
