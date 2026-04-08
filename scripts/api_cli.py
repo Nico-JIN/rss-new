@@ -679,6 +679,7 @@ def main():
     p_feed.add_argument('--end', type=str, help='结束时间 (ISO)')
     p_feed.add_argument('--limit', type=int, default=500, help='最大条数')
     p_feed.add_argument('--with-content', action='store_true', help='包含全文')
+    p_feed.add_argument('--no-external', action='store_true', help='禁用外部搜索源')
 
     # search
     p_search = sub.add_parser('search', help='关键字+时间搜索')
@@ -692,6 +693,7 @@ def main():
     p_search.add_argument('--external', type=str, help='外部搜索引擎（逗号分隔）: google_news,bing_news,newsapi,tavily,brave,twitter')
     p_search.add_argument('--ext-limit', type=int, default=30, help='每个外部引擎最大结果数')
     p_search.add_argument('--with-content', action='store_true', help='包含全文')
+    p_search.add_argument('--no-external', action='store_true', help='禁用外部搜索源')
 
     # hotspot
     p_hotspot = sub.add_parser('hotspot', help='热点捕获')
@@ -700,9 +702,6 @@ def main():
     p_hotspot.add_argument('--end', type=str, help='结束时间 (ISO)')
     p_hotspot.add_argument('--max', type=int, default=15, help='最大热点数')
     p_hotspot.add_argument('--keyword', type=str, help='热点类别关键字 (如: 中国、国际、周边)')
-
-    # Global flags
-    parser.add_argument('--no-external', action='store_true', help='禁用外部搜索源 (仅搜索本地DB)')
 
     # research
     p_research = sub.add_parser('research', help='深度研究')
