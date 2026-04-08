@@ -26,11 +26,13 @@ from pathlib import Path
 try:
     from store import get_conn, TZ_BJ, _retry_on_locked
     from llm_tagger import load_llm_config, is_english_text, batch_translate_to_chinese, translate_text
+    from filter_utils import is_chinese_media
 except ImportError:
     import sys
     sys.path.append(str(Path(__file__).parent))
     from store import get_conn, TZ_BJ, _retry_on_locked
     from llm_tagger import load_llm_config, is_english_text, batch_translate_to_chinese, translate_text
+    from filter_utils import is_chinese_media
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -578,6 +580,7 @@ def detect_hot_events(
     min_media_count: int = 2,
     min_articles: int = 2,
     max_results: int = 20,
+    keyword: str = None,
     conn=None
 ) -> list:
     """
@@ -590,6 +593,7 @@ def detect_hot_events(
         min_media_count: 最少媒体数量
         min_articles: 最少文章数量
         max_results: 返回结果数量上限
+        keyword: 过滤关键字 (针对标题、摘要或标签)
         conn: 数据库连接
     """
     # 计算实际的时间范围
@@ -614,7 +618,33 @@ def detect_hot_events(
             [q_start, q_end]
         ).fetchall()
 
-        articles = [dict(row) for row in rows]
+        articles = []
+        for row in rows:
+            a = dict(row)
+            # 1. 严格过滤中国媒体 (强制要求)
+            if is_chinese_media(a.get('platform', ''), a.get('url', '')):
+                continue
+            
+            # 2. 如果提供关键字，进行过滤 (增强匹配逻辑)
+            if keyword:
+                kw = keyword.lower()
+                title = a.get('title', '').lower()
+                summary = a.get('summary', '').lower()
+                tags = a.get('llm_tags', '').lower()
+                
+                # 标题匹配权重最高，标签次之，摘要最后
+                if kw in title:
+                    articles.append(a)
+                elif kw in tags and len(kw) > 1: # 标签匹配要求关键字不只是一个字（除非是地名）
+                    articles.append(a)
+                elif kw in summary and (f" {kw} " in f" {summary} " or f"【{kw}】" in summary):
+                    # 摘要匹配要求更精确的词边界，防止误伤
+                    articles.append(a)
+            else:
+                articles.append(a)
+
+        if keyword:
+            print(f"[INFO] 关键字过滤: '{keyword}', 最终保留 {len(articles)}/{len(rows)} 篇文章")
 
         if not articles:
             return []
@@ -705,6 +735,17 @@ def detect_hot_events(
                 'items': items
             }
 
+            # 3. 如果提供了关键字，进行二次校验 (确保事件整体主题相关)
+            if keyword:
+                kw = keyword.lower()
+                event_title_lower = event_title.lower()
+                tags_str = ' '.join(event['tags']).lower()
+                
+                # 如果标题和核心标签都不包含关键字，则该热点不属于目标分类
+                if kw not in event_title_lower and kw not in tags_str:
+                    # 允许地名缩写或其他同义词匹配（暂略，仅做基础匹配）
+                    continue
+
             results.append(event)
 
 
@@ -793,7 +834,16 @@ def get_hot_events_brief(hours: int = 24, max_results: int = 10) -> list:
             'all_platforms': e.get('all_platforms', [])[:6],  # 完整平台信息
             'tags': e['tags'],
             'is_china_related': e['is_china_related'],
-            'article_ids': [a['id'] for a in e['items'] if a.get('id')]
+            'articles': [
+                {
+                    'id': a.get('id'),
+                    'title': a.get('title', ''),
+                    'platform': a.get('platform', ''),
+                    'published': a.get('published', ''),
+                    'summary': a.get('summary', '')
+                }
+                for a in e['items']
+            ]
         })
 
     return brief

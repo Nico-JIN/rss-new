@@ -8,7 +8,7 @@ llm:
   # - "volcengine": 使用豆包 (Ark) 专用逻辑
   # - "qwen3.5-plus", "glm-5", "glm-4.7", "kimi-k2.5", "MiniMax-M2.5": 
   #   使用下方的 writing_aggregator 聚合配置
-  provider: "deepseek"
+  provider: "volcengine"
   
   # 1. 官方 DeepSeek 配置 (已恢复原有设置)
   api_key: "sk-7535891638454e09b8e38f92686c91bb"
@@ -29,6 +29,15 @@ llm:
   max_batch: 20          # 每批最多打包的文章数
   temperature: 0.1       # 稳定性参数
   timeout: 120           # API 超时时间 (秒)
+
+# 翻译专用模型配置 (适用于全平台内容翻译)
+translation_llm:
+  enabled: true
+  provider: "ollama"
+  api_key: "ollama"
+  base_url: "http://127.0.0.1:11434/v1"
+  model: "gemma4:e2b"
+  timeout: 180
 
 topics:
   - name: "中国言论"

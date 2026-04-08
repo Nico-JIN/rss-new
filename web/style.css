@@ -279,6 +279,23 @@ select.input { cursor: pointer; }
     width: 120px; height: 80px; border-radius: 8px;
     object-fit: cover; flex-shrink: 0; background: var(--bg-primary);
 }
+.article-thumb-wrapper { position: relative; flex-shrink: 0; }
+.video-play-icon {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px; height: 36px;
+    background: rgba(239, 68, 68, 0.9);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: white;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+    pointer-events: none;
+}
+.article-thumb-wrapper:hover .video-play-icon {
+    background: rgba(239, 68, 68, 1);
+    transform: translate(-50%, -50%) scale(1.1);
+    transition: all 0.2s ease;
+}
 .article-body { flex: 1; min-width: 0; }
 .article-title {
     font-size: 14px; font-weight: 600; margin-bottom: 6px;
@@ -491,12 +508,6 @@ select.input { cursor: pointer; }
     mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
 }
-.feed-item {
-    background: rgba(255,255,255,0.03);
-    border-left: 2px solid rgba(255,255,255,0.1);
-    padding: 12px; margin-bottom: 10px; border-radius: 0 4px 4px 0;
-    transition: all 0.4s ease;
-}
 .feed-item.new-item {
     background: rgba(0,243,255,0.15);
     border-left: 2px solid #00f3ff;
@@ -531,6 +542,112 @@ select.input { cursor: pointer; }
     background: #fff; border-radius: 50%;
     box-shadow: 0 0 20px 6px #00f3ff, 0 0 40px 10px #a855f7;
 }
+
+/* ── 发射卡片动画（先放大展示再缩小发射）────────────────────── */
+.launch-card {
+    position: absolute;
+    width: 280px;
+    background: linear-gradient(135deg, rgba(10, 15, 40, 0.95) 0%, rgba(5, 8, 20, 0.98) 100%);
+    border: 2px solid rgba(0, 243, 255, 0.6);
+    border-radius: 12px;
+    padding: 0;
+    pointer-events: none;
+    z-index: 200;
+    box-shadow: 0 0 30px rgba(0, 243, 255, 0.4), 0 0 60px rgba(168, 85, 247, 0.3), inset 0 0 20px rgba(0, 243, 255, 0.1);
+    transform-origin: center center;
+    animation: launchCardAppear 0.3s ease-out forwards, launchCardFade 0.5s ease-in 1.2s forwards;
+}
+.launch-card-thumb {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    border-radius: 10px 10px 0 0;
+    background: linear-gradient(135deg, rgba(0, 243, 255, 0.1), rgba(168, 85, 247, 0.1));
+}
+.launch-card-thumb-placeholder {
+    width: 100%;
+    height: 160px;
+    border-radius: 10px 10px 0 0;
+    background: linear-gradient(135deg, rgba(0, 243, 255, 0.2), rgba(168, 85, 247, 0.15));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: rgba(0, 243, 255, 0.5);
+}
+.launch-card-content { padding: 12px; }
+.launch-card-source { font-size: 11px; color: #a855f7; font-weight: 600; margin-bottom: 6px; }
+.launch-card-title {
+    font-size: 14px; color: #fff; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.launch-card-time { font-size: 10px; color: rgba(255, 255, 255, 0.5); margin-top: 6px; }
+
+@keyframes launchCardAppear {
+    0% { transform: scale(0.1) translateY(-50px); opacity: 0; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+@keyframes launchCardFade {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(0.6); opacity: 0.8; }
+    100% { transform: scale(0.3) translateX(200px); opacity: 0; }
+}
+
+/* ── 右侧列表带缩略图 ──────────────────────────────────────── */
+/* ── 3D 地球标签样式 ────────────────────────────────────── */
+.globe-label {
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    background: rgba(15, 17, 23, 0.7);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(0, 243, 255, 0.3);
+    border-radius: 4px;
+    color: #fff;
+    white-space: nowrap;
+    text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+    pointer-events: none;
+    line-height: 1.4;
+    box-shadow: 0 0 15px rgba(0,0,0,0.5);
+    transform: translateY(-10px); /* 稍微向上偏移，不遮挡点本身 */
+}
+.globe-label br {
+    display: block;
+    margin: 2px 0;
+}
+
+.feed-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 2px solid rgba(255, 255, 255, 0.1);
+    padding: 12px;
+    margin-bottom: 10px;
+    border-radius: 0 4px 4px 0;
+    transition: all 0.4s ease;
+    display: flex;
+    gap: 10px;
+}
+.feed-item-thumb {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, rgba(0, 243, 255, 0.1), rgba(168, 85, 247, 0.1));
+}
+.feed-item-thumb-placeholder {
+    width: 60px;
+    height: 60px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, rgba(0, 243, 255, 0.15), rgba(168, 85, 247, 0.1));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: rgba(0, 243, 255, 0.4);
+}
+.feed-item-content { flex: 1; min-width: 0; }
 
 /* ── 状态标签 ─────────────────────────────────────────── */
 .status-tag {

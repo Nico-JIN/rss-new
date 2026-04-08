@@ -10,7 +10,23 @@
       "Bash(chcp 65001)",
       "Bash(PYTHONIOENCODING=utf-8 python scripts/hotspot_detector.py --hours 24 --max 3)",
       "Bash(PYTHONIOENCODING=utf-8 python scripts/hotspot_detector.py --hours 24 --max 2 --json)",
-      "Bash(PYTHONIOENCODING=utf-8 python scripts/hotspot_detector.py --hours 24 --max 3 --json)"
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/hotspot_detector.py --hours 24 --max 3 --json)",
+      "Bash(python -c ':*)",
+      "Bash(ls -lt \"C:/Users/76539/.claude/projects/C--Users-76539--openclaw-skills-rss-news/\"*.jsonl)",
+      "Bash(grep -la \"Google News\\\\|YouTube\\\\|Twitter\\\\|外媒\\\\|搜索引擎\\\\|源管理\\\\|分类\" \"C:/Users/76539/.claude/projects/C--Users-76539--openclaw-skills-rss-news/\"*.jsonl)",
+      "Bash(grep -a \"YouTube\\\\|Reddit\" \"C:/Users/76539/.claude/projects/C--Users-76539--openclaw-skills-rss-news/\"*.jsonl)",
+      "Bash(start /B python app.py)",
+      "Bash(curl -s http://localhost:5000/ -o /dev/null -w \"Index: %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:5000/foreign_media.html -o /dev/null -w \"Foreign Media: %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:5000/api/external-sources)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'External sources: {len\\(d.get\\(\\\\\"sources\\\\\",[]\\)\\)} sources'\\)\")",
+      "Bash(python app.py)",
+      "Bash(curl -s -X POST http://localhost:5000/api/ollama/keywords -H \"Content-Type: application/json\" -d '{\"keyword\": \"中美贸易战\"}')",
+      "Bash(curl -s http://localhost:5000/api/ollama/status)",
+      "Bash(curl:*)",
+      "Bash(pkill -f \"python.*app.py\")",
+      "Bash(killall python:*)",
+      "Bash(python:*)"
     ]
   }
 }

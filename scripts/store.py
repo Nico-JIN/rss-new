@@ -58,6 +58,7 @@ def init_db(conn=None):
             summary     TEXT DEFAULT '',
             content     TEXT DEFAULT '',
             image       TEXT DEFAULT '',
+            video       TEXT DEFAULT '',
             llm_tags    TEXT DEFAULT '[]',
             country     TEXT DEFAULT '',
             created_at  TEXT DEFAULT (datetime('now', '+8 hours'))
@@ -117,6 +118,73 @@ def init_db(conn=None):
         );
         CREATE INDEX IF NOT EXISTS idx_timeline_events_timeline ON timeline_events(timeline_id);
         CREATE INDEX IF NOT EXISTS idx_timeline_events_time ON timeline_events(event_time);
+
+        -- 发布物表
+        CREATE TABLE IF NOT EXISTS publications (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            title           TEXT NOT NULL,
+            pub_type        TEXT DEFAULT 'daily_digest',
+            template_id     TEXT DEFAULT '',
+            status          TEXT DEFAULT 'draft',
+            content_md      TEXT DEFAULT '',
+            content_html    TEXT DEFAULT '',
+            source_hotspots TEXT DEFAULT '[]',
+            source_articles TEXT DEFAULT '[]',
+            author          TEXT DEFAULT 'system',
+            reviewer        TEXT DEFAULT '',
+            quality_score   REAL DEFAULT 0,
+            quality_checks  TEXT DEFAULT '{}',
+            version         INTEGER DEFAULT 1,
+            created_at      TEXT DEFAULT (datetime('now', '+8 hours')),
+            updated_at      TEXT DEFAULT (datetime('now', '+8 hours')),
+            published_at    TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_publications_status ON publications(status);
+        CREATE INDEX IF NOT EXISTS idx_publications_type ON publications(pub_type);
+
+        -- 发布物版本历史表
+        CREATE TABLE IF NOT EXISTS publication_history (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            pub_id          INTEGER NOT NULL,
+            version         INTEGER NOT NULL,
+            content_md      TEXT DEFAULT '',
+            status          TEXT DEFAULT '',
+            changed_by      TEXT DEFAULT '',
+            change_note     TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', '+8 hours')),
+            FOREIGN KEY (pub_id) REFERENCES publications(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_pub_history_pub ON publication_history(pub_id);
+
+        -- 关键词监控表
+        CREATE TABLE IF NOT EXISTS keyword_watches (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword         TEXT NOT NULL,
+            sources         TEXT DEFAULT '["google_news"]',
+            interval        TEXT DEFAULT 'daily',
+            enabled         INTEGER DEFAULT 1,
+            last_search     TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', '+8 hours'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_keyword_watches_enabled ON keyword_watches(enabled);
+
+        -- 外部搜索结果表
+        CREATE TABLE IF NOT EXISTS external_articles (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            url_hash        TEXT UNIQUE,
+            url             TEXT NOT NULL,
+            title           TEXT NOT NULL,
+            published       TEXT,
+            platform        TEXT DEFAULT '',
+            summary         TEXT DEFAULT '',
+            source_type     TEXT DEFAULT '',
+            keyword_match   TEXT DEFAULT '',
+            raw_metadata    TEXT DEFAULT '{}',
+            created_at      TEXT DEFAULT (datetime('now', '+8 hours'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_external_articles_time ON external_articles(published);
+        CREATE INDEX IF NOT EXISTS idx_external_articles_keyword ON external_articles(keyword_match);
+        CREATE INDEX IF NOT EXISTS idx_external_articles_url_hash ON external_articles(url_hash);
     """)
     
     # 动态迁移检测
@@ -131,6 +199,9 @@ def init_db(conn=None):
     if 'country' not in columns:
         c.execute("ALTER TABLE articles ADD COLUMN country TEXT DEFAULT ''")
         c.commit()
+    if 'video' not in columns:
+        c.execute("ALTER TABLE articles ADD COLUMN video TEXT DEFAULT ''")
+        c.commit()
         
     if conn is None:
         c.close()
@@ -141,28 +212,42 @@ def init_db(conn=None):
 
 
 def upsert_articles(items: list[dict], conn=None):
-    """批量写入文章，url_hash 冲突忽略。返回实际新增条数。"""
+    """
+    批量写入文章。
+    1. 使用 ON CONFLICT 处理 url_hash 冲突。
+    2. 如果冲突且原记录无图，则尝试更新图片字段（补全历史记录）。
+    3. 返回真正新增的条数。
+    """
     def _insert():
         c = conn or get_conn()
+        
+        # 统计入库前的数量
+        old_count = c.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
 
-        # Ensure all items have a 'content' field defaulting to empty string
+        # 确保基础字段存在
         for item in items:
-            if 'content' not in item:
-                item['content'] = ''
+            item.setdefault('content', '')
+            item.setdefault('llm_tags', '[]')
+            item.setdefault('video', '')
 
-        for item in items:
-            if 'llm_tags' not in item:
-                item['llm_tags'] = '[]'
-
+        # 使用 UPSERT 语法：冲突时如果旧记录没图，则更新图片
         sql = """
-            INSERT OR IGNORE INTO articles
-                (url_hash, title_hash, url, title, platform, media_group, country, published, summary, content, image, llm_tags)
-            VALUES
-                (:url_hash, :title_hash, :url, :title, :platform, :media_group, :country, :published, :summary, :content, :image, :llm_tags)
+            INSERT INTO articles 
+                (url_hash, title_hash, url, title, platform, media_group, country, published, summary, content, image, video, llm_tags)
+            VALUES 
+                (:url_hash, :title_hash, :url, :title, :platform, :media_group, :country, :published, :summary, :content, :image, :video, :llm_tags)
+            ON CONFLICT(url_hash) DO UPDATE SET 
+                image = CASE WHEN (image IS NULL OR image = '') THEN excluded.image ELSE image END,
+                video = CASE WHEN (video IS NULL OR video = '') THEN excluded.video ELSE video END
         """
-        cursor = c.executemany(sql, items)
-        inserted = cursor.rowcount
+        
+        c.executemany(sql, items)
         c.commit()
+        
+        # 统计入库后的数量
+        new_count = c.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+        inserted = new_count - old_count
+        
         if conn is None:
             c.close()
         return inserted
@@ -171,10 +256,16 @@ def upsert_articles(items: list[dict], conn=None):
 
 
 def query_by_time(start: str, end: str, media_group=None, platform=None, country=None, limit=200, offset=0, conn=None):
-    """按时间范围查询"""
+    """按时间范围查询。start/end 为 None 时不加时间过滤（全量查询）。"""
     c = conn or get_conn()
-    sql = "SELECT * FROM articles WHERE published >= ? AND published <= ?"
-    params = [start, end]
+    sql = "SELECT * FROM articles WHERE 1=1"
+    params = []
+    if start:
+        sql += " AND published >= ?"
+        params.append(start)
+    if end:
+        sql += " AND published <= ?"
+        params.append(end)
     if media_group:
         sql += " AND media_group = ?"
         params.append(media_group)
@@ -190,6 +281,7 @@ def query_by_time(start: str, end: str, media_group=None, platform=None, country
     if conn is None:
         c.close()
     return [dict(r) for r in rows]
+
 
 
 def query_by_keyword(keyword: str, start=None, end=None, media_group=None, platform=None, country=None,
@@ -731,6 +823,342 @@ def get_articles_by_ids(article_ids: list, conn=None) -> list:
             d['llm_tags'] = json.loads(d.get('llm_tags') or '[]')
         except (json.JSONDecodeError, TypeError):
             d['llm_tags'] = []
+        results.append(d)
+
+    if conn is None:
+        c.close()
+    return results
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 发布物操作
+# ═══════════════════════════════════════════════════════════════════
+
+def create_publication(title: str, pub_type: str, template_id: str = '',
+                       source_hotspots: list = None, source_articles: list = None,
+                       author: str = 'system', conn=None) -> int:
+    """创建发布物，返回 publication_id"""
+    def _insert():
+        c = conn or get_conn()
+        now = datetime.now(TZ_BJ).isoformat()
+        cursor = c.execute(
+            """INSERT INTO publications
+               (title, pub_type, template_id, source_hotspots, source_articles, author, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            [title, pub_type, template_id,
+             json.dumps(source_hotspots or [], ensure_ascii=False),
+             json.dumps(source_articles or [], ensure_ascii=False),
+             author, now, now]
+        )
+        pub_id = cursor.lastrowid
+        c.commit()
+        if conn is None:
+            c.close()
+        return pub_id
+
+    return _retry_on_locked(_insert)
+
+
+def get_publication(pub_id: int, conn=None) -> dict:
+    """获取单条发布物"""
+    c = conn or get_conn()
+    row = c.execute("SELECT * FROM publications WHERE id = ?", [pub_id]).fetchone()
+    if not row:
+        if conn is None:
+            c.close()
+        return None
+
+    pub = dict(row)
+    pub['source_hotspots'] = json.loads(pub.get('source_hotspots') or '[]')
+    pub['source_articles'] = json.loads(pub.get('source_articles') or '[]')
+    pub['quality_checks'] = json.loads(pub.get('quality_checks') or '{}')
+
+    if conn is None:
+        c.close()
+    return pub
+
+
+def list_publications(status: str = None, pub_type: str = None,
+                      limit: int = 50, conn=None) -> list:
+    """获取发布物列表"""
+    c = conn or get_conn()
+    sql = "SELECT * FROM publications WHERE 1=1"
+    params = []
+    if status:
+        sql += " AND status = ?"
+        params.append(status)
+    if pub_type:
+        sql += " AND pub_type = ?"
+        params.append(pub_type)
+    sql += " ORDER BY updated_at DESC LIMIT ?"
+    params.append(limit)
+
+    rows = c.execute(sql, params).fetchall()
+    results = []
+    for r in rows:
+        d = dict(r)
+        d['source_hotspots'] = json.loads(d.get('source_hotspots') or '[]')
+        d['source_articles'] = json.loads(d.get('source_articles') or '[]')
+        d['quality_checks'] = json.loads(d.get('quality_checks') or '{}')
+        results.append(d)
+
+    if conn is None:
+        c.close()
+    return results
+
+
+def update_publication_content(pub_id: int, content_md: str,
+                               content_html: str = '', conn=None):
+    """更新发布物内容"""
+    def _update():
+        c = conn or get_conn()
+        now = datetime.now(TZ_BJ).isoformat()
+        c.execute(
+            """UPDATE publications SET
+               content_md = ?, content_html = ?, updated_at = ?
+               WHERE id = ?""",
+            [content_md, content_html, now, pub_id]
+        )
+        c.commit()
+        if conn is None:
+            c.close()
+
+    return _retry_on_locked(_update)
+
+
+def update_publication_status(pub_id: int, new_status: str,
+                              reviewer: str = '', conn=None):
+    """更新发布物状态"""
+    def _update():
+        c = conn or get_conn()
+        now = datetime.now(TZ_BJ).isoformat()
+        published_at = now if new_status == 'published' else ''
+        c.execute(
+            """UPDATE publications SET
+               status = ?, reviewer = ?, updated_at = ?, published_at = COALESCE(?, published_at)
+               WHERE id = ?""",
+            [new_status, reviewer, now, published_at or None, pub_id]
+        )
+        c.commit()
+        if conn is None:
+            c.close()
+
+    return _retry_on_locked(_update)
+
+
+def update_publication_quality(pub_id: int, quality_score: float,
+                               quality_checks: dict, conn=None):
+    """更新发布物质量评分"""
+    def _update():
+        c = conn or get_conn()
+        now = datetime.now(TZ_BJ).isoformat()
+        c.execute(
+            """UPDATE publications SET
+               quality_score = ?, quality_checks = ?, updated_at = ?
+               WHERE id = ?""",
+            [quality_score, json.dumps(quality_checks, ensure_ascii=False), now, pub_id]
+        )
+        c.commit()
+        if conn is None:
+            c.close()
+
+    return _retry_on_locked(_update)
+
+
+def delete_publication(pub_id: int, conn=None):
+    """删除发布物"""
+    def _delete():
+        c = conn or get_conn()
+        c.execute("DELETE FROM publication_history WHERE pub_id = ?", [pub_id])
+        c.execute("DELETE FROM publications WHERE id = ?", [pub_id])
+        c.commit()
+        if conn is None:
+            c.close()
+
+    return _retry_on_locked(_delete)
+
+
+def create_publication_history(pub_id: int, version: int, content_md: str,
+                               status: str, changed_by: str = '',
+                               change_note: str = '', conn=None):
+    """创建发布物版本历史"""
+    def _insert():
+        c = conn or get_conn()
+        now = datetime.now(TZ_BJ).isoformat()
+        c.execute(
+            """INSERT INTO publication_history
+               (pub_id, version, content_md, status, changed_by, change_note, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            [pub_id, version, content_md, status, changed_by, change_note, now]
+        )
+        # 更新版本号
+        c.execute("UPDATE publications SET version = version + 1 WHERE id = ?", [pub_id])
+        c.commit()
+        if conn is None:
+            c.close()
+
+    return _retry_on_locked(_insert)
+
+
+def get_publication_history(pub_id: int, conn=None) -> list:
+    """获取发布物版本历史"""
+    c = conn or get_conn()
+    rows = c.execute(
+        "SELECT * FROM publication_history WHERE pub_id = ? ORDER BY version DESC",
+        [pub_id]
+    ).fetchall()
+    results = [dict(r) for r in rows]
+    if conn is None:
+        c.close()
+    return results
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 关键词监控操作
+# ═══════════════════════════════════════════════════════════════════
+
+def create_keyword_watch(keyword: str, sources: list,
+                         interval: str = 'daily', conn=None) -> int:
+    """创建关键词监控任务"""
+    def _insert():
+        c = conn or get_conn()
+        now = datetime.now(TZ_BJ).isoformat()
+        cursor = c.execute(
+            """INSERT INTO keyword_watches
+               (keyword, sources, interval, enabled, created_at)
+               VALUES (?, ?, ?, 1, ?)""",
+            [keyword, json.dumps(sources, ensure_ascii=False), interval, now]
+        )
+        watch_id = cursor.lastrowid
+        c.commit()
+        if conn is None:
+            c.close()
+        return watch_id
+
+    return _retry_on_locked(_insert)
+
+
+def list_keyword_watches(enabled_only: bool = True, conn=None) -> list:
+    """列出关键词监控任务"""
+    c = conn or get_conn()
+    sql = "SELECT * FROM keyword_watches"
+    if enabled_only:
+        sql += " WHERE enabled = 1"
+    sql += " ORDER BY id DESC"
+
+    rows = c.execute(sql).fetchall()
+    results = []
+    for r in rows:
+        d = dict(r)
+        d['sources'] = json.loads(d.get('sources') or '["google_news"]')
+        results.append(d)
+
+    if conn is None:
+        c.close()
+    return results
+
+
+def set_keyword_watch_enabled(watch_id: int, enabled: bool, conn=None):
+    """启用/禁用关键词监控"""
+    def _update():
+        c = conn or get_conn()
+        c.execute(
+            "UPDATE keyword_watches SET enabled = ? WHERE id = ?",
+            [1 if enabled else 0, watch_id]
+        )
+        c.commit()
+        if conn is None:
+            c.close()
+
+    return _retry_on_locked(_update)
+
+
+def delete_keyword_watch(watch_id: int, conn=None):
+    """删除关键词监控"""
+    def _delete():
+        c = conn or get_conn()
+        c.execute("DELETE FROM keyword_watches WHERE id = ?", [watch_id])
+        c.commit()
+        if conn is None:
+            c.close()
+
+    return _retry_on_locked(_delete)
+
+
+def update_keyword_watch_last_search(watch_id: int, conn=None):
+    """更新关键词监控的最后搜索时间"""
+    def _update():
+        c = conn or get_conn()
+        now = datetime.now(TZ_BJ).isoformat()
+        c.execute(
+            "UPDATE keyword_watches SET last_search = ? WHERE id = ?",
+            [now, watch_id]
+        )
+        c.commit()
+        if conn is None:
+            c.close()
+
+    return _retry_on_locked(_update)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 外部搜索结果操作
+# ═══════════════════════════════════════════════════════════════════
+
+def upsert_external_articles(articles: list, keyword_match: str = '', conn=None) -> int:
+    """批量写入外部搜索结果，url_hash 冲突忽略"""
+    def _insert():
+        c = conn or get_conn()
+        now = datetime.now(TZ_BJ).isoformat()
+        inserted = 0
+        for a in articles:
+            url_hash = hashlib.sha1(a.get('url', '').encode()).hexdigest()[:16]
+            try:
+                c.execute(
+                    """INSERT OR IGNORE INTO external_articles
+                       (url_hash, url, title, published, platform, summary, source_type, keyword_match, raw_metadata, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    [url_hash, a.get('url', ''), a.get('title', ''),
+                     a.get('published', now), a.get('platform', ''),
+                     a.get('summary', ''), a.get('source_type', ''),
+                     keyword_match, json.dumps(a.get('raw_metadata', {}), ensure_ascii=False), now]
+                )
+                if c.rowcount > 0:
+                    inserted += 1
+            except:
+                pass
+        c.commit()
+        if conn is None:
+            c.close()
+        return inserted
+
+    import hashlib
+    return _retry_on_locked(_insert)
+
+
+def query_external_articles(keyword: str = None, source_type: str = None,
+                            start: str = None, limit: int = 50, conn=None) -> list:
+    """查询外部搜索结果"""
+    c = conn or get_conn()
+    sql = "SELECT * FROM external_articles WHERE 1=1"
+    params = []
+    if keyword:
+        sql += " AND keyword_match LIKE ?"
+        params.append(f"%{keyword}%")
+    if source_type:
+        sql += " AND source_type = ?"
+        params.append(source_type)
+    if start:
+        sql += " AND published >= ?"
+        params.append(start)
+    sql += " ORDER BY published DESC LIMIT ?"
+    params.append(limit)
+
+    rows = c.execute(sql, params).fetchall()
+    results = []
+    for r in rows:
+        d = dict(r)
+        d['raw_metadata'] = json.loads(d.get('raw_metadata') or '{}')
         results.append(d)
 
     if conn is None:

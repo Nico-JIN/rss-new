@@ -242,8 +242,10 @@ def enrich_article_content(articles: list, max_workers: int = 5) -> list:
     enriched = {}
 
     def fetch_task(item):
-        content = fetch_article_content(item['url'])
-        return item['id'], content
+        url = item.get('url', '')
+        art_id = item.get('id') or url # 如果没有 ID，使用 URL 作为临时 Key
+        content = fetch_article_content(url)
+        return art_id, content
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(fetch_task, item) for item in missing_content]
@@ -257,14 +259,16 @@ def enrich_article_content(articles: list, max_workers: int = 5) -> list:
 
     # 更新文章的 content 字段
     for art in articles:
-        if art['id'] in enriched:
-            art['content'] = enriched[art['id']]
-            # 同步更新数据库（可选）
-            try:
-                from store import update_article_content
-                update_article_content(art['id'], enriched[art['id']])
-            except:
-                pass
+        art_id = art.get('id') or art.get('url')
+        if art_id in enriched:
+            art['content'] = enriched[art_id]
+            # 同步更新数据库（仅针对有 ID 的文章）
+            if art.get('id'):
+                try:
+                    from store import update_article_content
+                    update_article_content(art['id'], enriched[art_id])
+                except:
+                    pass
 
     return articles
 

@@ -1,0 +1,77 @@
+# 定时关键词搜索配置
+# 定义需要持续监控的关键词及搜索源
+
+# 全局设置
+settings:
+  # 默认搜索间隔
+  default_interval: "daily"
+  # 每个源的最大结果数
+  max_results_per_source: 20
+  # 是否启用并发搜索
+  concurrent_search: true
+  # 搜索失败重试次数
+  retry_count: 2
+
+# 关键词监控列表
+keywords:
+  # 中国相关
+  - term: "中国 关税 制裁"
+    interval: "hourly"
+    sources:
+      - google_news
+      - brave
+    enabled: true
+    notes: "中国贸易相关新闻"
+
+  - term: "Taiwan Strait"
+    interval: "daily"
+    sources:
+      - google_news
+      - bing
+    enabled: true
+    notes: "台海局势"
+
+  - term: "中美关系"
+    interval: "daily"
+    sources:
+      - google_news
+    enabled: true
+    notes: "中美关系动态"
+
+  # 国际热点
+  - term: "Russia Ukraine"
+    interval: "daily"
+    sources:
+      - google_news
+      - brave
+    enabled: true
+    notes: "俄乌冲突"
+
+  - term: "Middle East conflict"
+    interval: "daily"
+    sources:
+      - google_news
+    enabled: false
+    notes: "中东冲突（暂停监控）"
+
+  # 经济金融
+  - term: "Federal Reserve interest rate"
+    interval: "daily"
+    sources:
+      - google_news
+      - brave
+    enabled: true
+    notes: "美联储利率政策"
+
+  - term: "全球供应链"
+    interval: "weekly"
+    sources:
+      - google_news
+    enabled: true
+    notes: "全球供应链动态"
+
+# 搜索源配置说明
+# google_news: 免费，无需 API Key，通过 RSS 搜索
+# bing: 需要 Bing News Search API Key (config/api_keys.json: bing_key)
+# brave: 需要 Brave Search API Key (config/api_keys.json: brave_key)
+# tavily: 需要 Tavily API Key (config/api_keys.json: tavily_key)

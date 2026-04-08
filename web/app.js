@@ -109,19 +109,33 @@ window.removeFromWorkbench = function(id) {
 function initNav() {
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', (e) => {
-            e.preventDefault();
             const page = link.dataset.page;
-            switchPage(page);
+            if (page) {
+                e.preventDefault();
+                switchPage(page);
+            }
+            // If no data-page, allow default <a> navigation (e.g., to /foreign_media.html)
         });
     });
 }
 
 function switchPage(page) {
+    if (!page) return;
     currentPage = page;
+    
+    // 1. 更新导航栏状态
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-    document.querySelector(`[data-page="${page}"]`).classList.add('active');
+    const navLink = document.querySelector(`[data-page="${page}"]`);
+    if (navLink) navLink.classList.add('active');
+
+    // 2. 切换页面正文显示
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.getElementById(`page-${page}`).classList.add('active');
+    const pageEl = document.getElementById(`page-${page}`);
+    if (pageEl) {
+        pageEl.classList.add('active');
+    } else {
+        console.warn(`[WARN] 页面元素 page-${page} 不存在`);
+    }
 
     if (page === 'dashboard') loadDashboard();
     else if (page === 'feeds') loadFeeds();
@@ -173,13 +187,35 @@ function escHtml(s) {
 
 function getCountryFlag(country) {
     const flags = {
-        '美国': '🇺🇸', '英国': '🇬🇧', '日本': '🇯🇵', '韩国': '🇰🇷', '新加坡': '🇸🇬', 
+        '美国': '🇺🇸', '英国': '🇬🇧', '日本': '🇯🇵', '韩国': '🇰🇷', '新加坡': '🇸🇬',
         '俄罗斯': '🇷🇺', '中国': '🇨🇳', '台湾': '🇹🇼', '香港': '🇭🇰', '中国香港': '🇭🇰',
         '中国台湾': '🇹🇼', '法国': '🇫🇷', '德国': '🇩🇪', '加拿大': '🇨🇦', '澳大利亚': '🇦🇺',
         '印度': '🇮🇳', '瑞士': '🇨🇭', '以色列': '🇮🇱', '乌克兰': '🇺🇦', '中东': '☪️'
     };
     if (!country) return '🌐';
     return flags[country] || '🏳️';
+}
+
+// 获取媒体缩略图URL（支持图片和YouTube视频）
+function getMediaThumbUrl(image, video) {
+    // 优先使用视频缩略图
+    if (video && (video.includes('youtube.com') || video.includes('youtu.be'))) {
+        let videoId = '';
+        if (video.includes('youtube.com/watch?v=')) {
+            const match = video.match(/[?&]v=([^&]+)/);
+            if (match) videoId = match[1];
+        } else if (video.includes('youtu.be/')) {
+            const match = video.match(/youtu\.be\/([^?]+)/);
+            if (match) videoId = match[1];
+        } else if (video.includes('youtube.com/embed/')) {
+            const match = video.match(/embed\/([^?]+)/);
+            if (match) videoId = match[1];
+        }
+        if (videoId) {
+            return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+        }
+    }
+    return image || '';
 }
 
 // ── 仪表盘 ───────────────────────────────────────────────
@@ -304,63 +340,105 @@ let progressInterval = null;
 let recentArticles = []; // 用于侧边栏滚动条
 let articleIds = new Set();
 
-// 流星精准弹射机制
+// 流星精准弹射机制 + 发射卡片动画
 function spawnMeteor(feed, item) {
     if (!myGlobe) return;
     const coords = myGlobe.getScreenCoords(feed.lat, feed.lng);
-    if (!coords) return; 
+    if (!coords) return;
 
     const key = item.article_title + item.article_time;
     if (articleIds.has(key)) return;
     articleIds.add(key);
 
+    const scifiRect = document.getElementById('shootingStarsLayer').getBoundingClientRect();
     const list = document.getElementById('liveFeedList');
+
+    // 1. 创建发射卡片（先放大展示）
+    const launchCard = document.createElement('div');
+    launchCard.className = 'launch-card';
+
+    const imageUrl = item.image || '';
+    const hasImage = imageUrl && imageUrl.length > 0;
+
+    launchCard.innerHTML = `
+        ${hasImage
+            ? `<img class="launch-card-thumb" src="${escHtml(imageUrl)}" onerror="this.outerHTML='<div class=\\'launch-card-thumb-placeholder\\'>📰</div>'" />`
+            : `<div class="launch-card-thumb-placeholder">📰</div>`
+        }
+        <div class="launch-card-content">
+            <div class="launch-card-source">${escHtml(item.feed_name || feed.name || '未知频段')}</div>
+            <div class="launch-card-title">${escHtml(item.article_title)}</div>
+            <div class="launch-card-time">${item.article_time || ''}</div>
+        </div>
+    `;
+
+    // 定位在球体附近（略微偏移避免遮挡）
+    launchCard.style.left = (coords.x - 140) + 'px';
+    launchCard.style.top = (coords.y - 100) + 'px';
+
+    document.getElementById('shootingStarsLayer').appendChild(launchCard);
+
+    // 2. 创建右侧列表项（带缩略图）
     const div = document.createElement('div');
     div.className = 'feed-item';
-    div.style.opacity = '0'; // 隐形占位
+    div.style.opacity = '0'; // 隐形占位，等待动画
     div.innerHTML = `
-        <div class="fi-meta"><span class="fi-source">${escHtml(item.feed_name || feed.name || '未知频段')}</span> <span class="fi-time">${item.article_time || ''}</span></div>
-        <div class="fi-title">${escHtml(item.article_title)}</div>
+        ${hasImage
+            ? `<img class="feed-item-thumb" src="${escHtml(imageUrl)}" onerror="this.outerHTML='<div class=\\'feed-item-thumb-placeholder\\'>📰</div>'" />`
+            : `<div class="feed-item-thumb-placeholder">📰</div>`
+        }
+        <div class="feed-item-content">
+            <div class="fi-meta"><span class="fi-source">${escHtml(item.feed_name || feed.name || '未知频段')}</span> <span class="fi-time">${item.article_time || ''}</span></div>
+            <div class="fi-title">${escHtml(item.article_title)}</div>
+        </div>
     `;
     list.prepend(div);
 
-    const scifiRect = document.getElementById('shootingStarsLayer').getBoundingClientRect();
+    // 计算右侧目标位置
     const rect = div.getBoundingClientRect();
     const targetX = rect.left - scifiRect.left;
     const targetY = rect.top - scifiRect.top + rect.height / 2;
 
-    const star = document.createElement('div');
-    star.className = 'meteor-star';
-    star.style.left = coords.x + 'px';
-    star.style.top = coords.y + 'px';
-    
-    document.getElementById('shootingStarsLayer').appendChild(star);
-
-    // 强制重绘
-    star.getBoundingClientRect();
-
-    // 计算射线夹角与距离
-    const dx = targetX - coords.x;
-    const dy = targetY - coords.y;
-    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-
-    star.style.width = '60px'; // 射线初始长度拖尾
-    star.style.transform = `rotate(${angle}deg) translateX(${dist}px)`;
-    star.style.opacity = '0';
-
+    // 3. 延迟发射流星射线（在卡片展示后）
     setTimeout(() => {
-        star.remove();
-        div.classList.add('new-item');
-        div.style.opacity = '';
-        
-        recentArticles.unshift({ ...item, source: feed.feed_name || feed.platform });
-        if (list.children.length > 50) {
-            const removed = recentArticles.pop();
-            if(removed) articleIds.delete(removed.article_title + removed.article_time);
-            list.removeChild(list.lastChild);
-        }
-    }, 600);
+        const star = document.createElement('div');
+        star.className = 'meteor-star';
+        star.style.left = coords.x + 'px';
+        star.style.top = coords.y + 'px';
+
+        document.getElementById('shootingStarsLayer').appendChild(star);
+
+        // 强制重绘
+        star.getBoundingClientRect();
+
+        // 计算射线夹角与距离
+        const dx = targetX - coords.x;
+        const dy = targetY - coords.y;
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        star.style.width = '60px';
+        star.style.transform = `rotate(${angle}deg) translateX(${dist}px)`;
+        star.style.opacity = '0';
+
+        setTimeout(() => {
+            star.remove();
+            div.classList.add('new-item');
+            div.style.opacity = '';
+
+            recentArticles.unshift({ ...item, source: feed.feed_name || feed.platform });
+            if (list.children.length > 50) {
+                const removed = recentArticles.pop();
+                if (removed) articleIds.delete(removed.article_title + removed.article_time);
+                list.removeChild(list.lastChild);
+            }
+        }, 600);
+    }, 1300); // 等待launchCard动画完成（1.2s动画 + 0.1s缓冲）
+
+    // 4. 清理发射卡片
+    setTimeout(() => {
+        launchCard.remove();
+    }, 1700);
 }
 
 // --- 补充坐标库与翻译库 ---
@@ -473,28 +551,7 @@ const CITY_COORDS = {
     '悉尼': {lat: -33.8688, lng: 151.2093},
     '墨尔本': {lat: -37.8136, lng: 144.9631},
     '堪培拉': {lat: -35.2809, lng: 149.1300},
-
-    // === 加拿大 ===
-    '加拿大': {lat: 45.4215, lng: -75.6972},
-    '多伦多': {lat: 43.6532, lng: -79.3832},
-    '温哥华': {lat: 49.2827, lng: -123.1207},
-    '渥太华': {lat: 45.4215, lng: -75.6972},
-
-    // === 欧洲其他 ===
-    '瑞士': {lat: 46.9480, lng: 7.4474},
-    '苏黎世': {lat: 47.3769, lng: 8.5417},
-    '日内瓦': {lat: 46.2044, lng: 6.1432},
-    '荷兰': {lat: 52.3676, lng: 4.9041},
-    '阿姆斯特丹': {lat: 52.3676, lng: 4.9041},
-    '比利时': {lat: 50.8503, lng: 4.3517},
-    '布鲁塞尔': {lat: 50.8503, lng: 4.3517},
-    '西班牙': {lat: 40.4168, lng: -3.7038},
-    '马德里': {lat: 40.4168, lng: -3.7038},
-    '意大利': {lat: 41.9028, lng: 12.4964},
-    '罗马': {lat: 41.9028, lng: 12.4964},
-    '米兰': {lat: 45.4642, lng: 9.1900},
     '瑞典': {lat: 59.3293, lng: 18.0686},
-    '斯德哥尔摩': {lat: 59.3293, lng: 18.0686},
     '挪威': {lat: 59.9139, lng: 10.7522},
     '奥斯陆': {lat: 59.9139, lng: 10.7522},
     '丹麦': {lat: 55.6761, lng: 12.5683},
@@ -622,16 +679,47 @@ async function refreshGlobeFeeds() {
         }
     }
     
-    feedLocations = Object.values(locationMap).map(d => ({
-        lat: d.lat, lng: d.lng,
-        name: Array.from(d.names).join(' | '),
-        platforms: Array.from(d.rawPlatforms) // 用于寻找对应坐标点
-    }));
+    const NAME_MAP = {
+        '联合早报': 'Lianhe Zaobao',
+        '路透社': 'Reuters',
+        '纽约时报': 'NYT',
+        '华盛顿邮报': 'Washington Post',
+        'CNN': 'CNN',
+        'BBC': 'BBC',
+        'NHK': 'NHK',
+        'SCMP': 'SCMP',
+        '南华早报': 'SCMP',
+        '韩联社': 'Yonhap',
+        '俄罗斯卫星通讯社': 'Sputnik',
+        '共同社': 'Kyodo News',
+        '共同网': 'Kyodo News',
+        '日经中文网': 'Nikkei',
+        '美联社': 'AP',
+        '德国之声': 'DW',
+        '印度经济时报': 'Economic Times',
+        '法国24电视台': 'France 24',
+        '加拿大广播公司': 'CBC',
+        '加拿大金融邮报': 'Financial Post',
+        '彭博社': 'Bloomberg',
+        '美国国防部': 'DoD'
+    };
+
+    feedLocations = Object.values(locationMap).map(d => {
+        const bilingualNames = Array.from(d.names).map(n => {
+            const en = NAME_MAP[n];
+            return en ? `${n} | ${en}` : n;
+        });
+        return {
+            lat: d.lat, lng: d.lng,
+            name: bilingualNames.join(' <br> '),
+            platforms: Array.from(d.rawPlatforms)
+        };
+    });
 
     if (myGlobe) {
         myGlobe.pointsData(feedLocations);
         myGlobe.ringsData(feedLocations);
-        myGlobe.labelsData(feedLocations);
+        myGlobe.htmlElementsData(feedLocations);
     }
 }
 
@@ -655,10 +743,10 @@ async function renderGlobeMap() {
             .showAtmosphere(true)
             .atmosphereColor('#00f3ff')
             .atmosphereAltitude(0.12)
-            // 国家边界 - 微弱青色描边
+            // 国家边界 - 增强可见度
             .polygonCapColor(() => 'rgba(0, 243, 255, 0.02)')
             .polygonSideColor(() => 'rgba(0, 0, 0, 0)')
-            .polygonStrokeColor(() => 'rgba(0, 243, 255, 0.06)')
+            .polygonStrokeColor(() => 'rgba(0, 243, 255, 0.4)')
             .polygonLabel(({ properties: d }) => `
                 <div style="background: rgba(0,0,0,0.9); padding: 10px 16px; border: 1px solid #00f3ff; border-radius: 8px; color: white; box-shadow: 0 0 20px rgba(0,243,255,0.3);">
                     <span style="color:#00f3ff; font-weight: 700; font-size: 14px;">${COUNTRY_TRANS[d.ADMIN] || d.ADMIN}</span>
@@ -669,20 +757,22 @@ async function renderGlobeMap() {
             .pointColor(() => '#00f3ff')
             .pointRadius(0.5)
             .pointAltitude(0.02)
-            // 脉冲圆环效果 - 扩散动画
+            // 脉冲圆环效果
             .ringsData(feedLocations)
             .ringColor(() => 'rgba(0, 243, 255, 0.4)')
             .ringMaxRadius(3)
             .ringPropagationSpeed(2)
             .ringRepeatPeriod(1200)
-            // 文字标签 - 白色
-            .labelsData(feedLocations)
-            .labelText(d => d.name)
-            .labelSize(1.1)
-            .labelDotRadius(0)
-            .labelColor(() => '#ffffff')
-            .labelResolution(3)
-            .labelAltitude(0.05);
+            // 使用 HTML 元素替代原生 Label 以支持中文字符和更好的样式
+            .htmlElementsData(feedLocations)
+            .htmlElement(d => {
+                const el = document.createElement('div');
+                el.innerHTML = `<div class="globe-label">${d.name}</div>`;
+                el.style.color = '#ffffff';
+                el.style.width = 'fit-content';
+                el.style['pointer-events'] = 'none';
+                return el;
+            });
 
         // 加载国家边界
         fetch('https://unpkg.com/globe.gl/example/datasets/ne_110m_admin_0_countries.geojson')
@@ -1017,9 +1107,26 @@ async function pollSchedulerStatus() {
 }
 
 // ── 源管理 ───────────────────────────────────────────────
+
+// 折叠/展开状态
+const categoryState = { rss: true, external: false };
+
+// 挂载到 window 以便 HTML onclick 调用
+window.toggleSourceCategory = function(type) {
+    categoryState[type] = !categoryState[type];
+    const container = document.getElementById(type === 'rss' ? 'rssFeedsContainer' : 'externalFeedsContainer');
+    const icon = document.getElementById(type === 'rss' ? 'rssToggleIcon' : 'externalToggleIcon');
+
+    if (container) {
+        container.style.display = categoryState[type] ? 'block' : 'none';
+    }
+    if (icon) {
+        icon.style.transform = categoryState[type] ? 'rotate(0deg)' : 'rotate(-90deg)';
+    }
+}
+
 async function loadFeeds() {
     const data = await api('/api/feeds');
-    const container = document.getElementById('feedsContainer');
     const feeds = data.feeds || [];
 
     // 设置间隔 input 值及开启状态
@@ -1029,77 +1136,62 @@ async function loadFeeds() {
         checkAutoFetch.checked = !!data.settings?.auto_fetch;
     }
 
+    // 更新计数
+    document.getElementById('rssCount').textContent = `${feeds.length} 个RSS源`;
+
+    // 渲染 RSS 源
+    const container = document.getElementById('rssFeedsContainer');
+
     if (!feeds.length) {
-        container.innerHTML = '<div class="card"><div class="empty-state"><div class="icon">📋</div>暂无配置源</div></div>';
-        return;
+        container.innerHTML = '<div class="card"><div class="empty-state"><div class="icon">📋</div>暂无配置源，点击上方"添加RSS源"按钮添加</div></div>';
+    } else {
+        // 按国家分组
+        const grouped = {};
+        feeds.forEach((f, i) => {
+            const c = f.country || '未分类';
+            if (!grouped[c]) grouped[c] = [];
+            grouped[c].push({...f, _idx: i});
+        });
+
+        const countries = Object.keys(grouped).sort();
+
+        container.innerHTML = countries.map(country => `
+            <div class="card" style="margin-bottom: 15px;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <span style="font-size: 20px;">${getCountryFlag(country)}</span>
+                    <h4 style="margin:0; font-size: 14px; font-weight:600;">${escHtml(country)}</h4>
+                    <span style="font-size: 11px; color: var(--text-secondary);">${grouped[country].length} 个源</span>
+                </div>
+                <table class="data-table" style="font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th style="width:40px">#</th>
+                            <th>平台</th>
+                            <th>媒体组</th>
+                            <th style="width:80px">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${grouped[country].map((f) => `
+                            <tr>
+                                <td>${f._idx}</td>
+                                <td>
+                                    <div style="font-weight:600">${escHtml(f.platform)}</div>
+                                    <div style="font-size:10px;color:var(--text-secondary);margin-top:2px;word-break:break-all;max-width:300px;">${escHtml(f.url)}</div>
+                                </td>
+                                <td>${escHtml(f.media_group || '-')}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-secondary" onclick="editFeed(${f._idx})" title="编辑">✏️</button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteFeed(${f._idx})" title="删除">🗑️</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `).join('');
     }
 
-    // 按国家分组
-    const grouped = {};
-    feeds.forEach((f, i) => {
-        const c = f.country || '未分类';
-        if (!grouped[c]) grouped[c] = [];
-        grouped[c].push({...f, _idx: i}); // 记录原始索引
-    });
-
-    const countries = Object.keys(grouped).sort();
-    
-    container.innerHTML = countries.map(country => `
-        <div class="card feed-group-card" style="margin-bottom: 30px; border-top: 3px solid var(--accent);">
-            <div class="feed-group-header" style="display:flex; align-items:center; gap:10px; margin-bottom: 20px;">
-                <span style="font-size: 24px;">${getCountryFlag(country)}</span>
-                <h3 style="margin:0; font-size: 18px; font-weight:700;">${escHtml(country)}</h3>
-                <span class="badge" style="background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:12px; font-size:12px; color:var(--text-secondary);">
-                    ${grouped[country].length} 个源
-                </span>
-            </div>
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>平台名称</th>
-                        <th>媒体组</th>
-                        <th>所在城市</th>
-                        <th>仅时间增量</th>
-                        <th>超时(s)</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${grouped[country].map((f, i) => `
-                        <tr>
-                            <td>${f._idx}</td>
-                            <td>
-                                <div style="font-weight:600">${escHtml(f.platform)}</div>
-                                <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;word-break:break-all">${escHtml(f.url)}</div>
-                                ${f.scrape_url ? `<div style="font-size:10px;color:var(--accent-1);background:rgba(99,102,241,0.1);padding:2px 4px;border-radius:4px;margin-top:4px;display:inline-block;">🔗 直采: ${escHtml(f.scrape_url)}</div>` : ''}
-                                ${f.fetch_jina ? `<div style="font-size:10px;color:var(--success);background:rgba(34,197,94,0.1);padding:2px 4px;border-radius:4px;margin-top:4px;display:inline-block;margin-left:4px;">🤖 Jina</div>` : ''}
-                            </td>
-                            <td>${escHtml(f.media_group || '')}</td>
-                            <td>${escHtml(f.city || '')}</td>
-                            <td>
-                                <label class="toggle">
-                                    <input type="checkbox" ${f.time_only ? 'checked' : ''} onchange="toggleTimeOnly(${f._idx}, this.checked)">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </td>
-                            <td>${f.timeout || 30}</td>
-                            <td>
-                                <div style="display:flex; gap: 4px;">
-                                    <button class="btn btn-sm btn-secondary" onclick="editFeed(${f._idx})">编辑</button>
-                                    <button class="btn btn-sm btn-danger" onclick="deleteFeed(${f._idx})">删除</button>
-                                </div>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `).join('');
-
-    // 添加按钮
-    document.getElementById('btnAddFeed').onclick = () => openFeedModal(-1);
-    
     // 设置间隔按钮
     document.getElementById('btnSetInterval').onclick = async () => {
         const val = document.getElementById('inputInterval').value;
@@ -1108,6 +1200,151 @@ async function loadFeeds() {
         alert('配置已保存并生效');
         pollSchedulerStatus();
     };
+
+    // 加载外部搜索源
+    loadExternalSources();
+
+    // 应用折叠状态（初始状态已在 CSS 中设置）
+    // RSS 默认展开，外部源默认折叠
+}
+
+// 加载并显示外部搜索源
+async function loadExternalSources() {
+    try {
+        const data = await api('/api/external-sources');
+        const sources = data.sources || [];
+        const grouped = data.grouped || {};
+
+        // 更新计数
+        const enabledCount = sources.filter(s => s.enabled).length;
+        document.getElementById('externalCount').textContent = `${sources.length} 个源 (${enabledCount} 个已启用)`;
+
+        const container = document.getElementById('externalFeedsContainer');
+
+        if (!sources.length) {
+            container.innerHTML = '<div class="card"><div class="empty-state"><div class="icon">🌐</div>暂无外部搜索源配置</div></div>';
+            return;
+        }
+
+        // 分类图标映射
+        const categoryIcons = {
+            '社交媒体': '💬',
+            '搜索引擎': '🔍',
+            '新闻聚合': '📰',
+            'AI搜索引擎': '🤖',
+            '其他': '📡'
+        };
+
+        let html = '';
+        for (const [category, items] of Object.entries(grouped)) {
+            html += `
+                <div class="card" style="margin-bottom: 15px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(99,102,241,0.2);">
+                        <span style="font-size: 20px;">${categoryIcons[category] || '📡'}</span>
+                        <h4 style="margin:0; font-size: 14px; font-weight:600; color: #6366f1;">${category}</h4>
+                        <span style="font-size: 11px; color: var(--text-secondary);">${items.length} 个源</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px;">
+                        ${items.map(src => `
+                            <div class="external-source-card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span style="font-weight: 600; font-size: 14px;">${escHtml(src.name)}</span>
+                                    <label class="toggle" style="transform: scale(0.75);">
+                                        <input type="checkbox" ${src.enabled ? 'checked' : ''} onchange="toggleExternalSource('${escHtml(src.name)}', this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">${escHtml(src.description || '')}</div>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                    <span style="font-size: 10px; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
+                                        类型: ${src.type}
+                                    </span>
+                                    <span style="font-size: 10px; color: ${src.enabled ? '#22c55e' : 'var(--text-secondary)'}; background: ${src.enabled ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)'}; padding: 2px 6px; border-radius: 4px;">
+                                        ${src.enabled ? '已启用' : '已禁用'}
+                                    </span>
+                                </div>
+                                <button class="btn btn-sm btn-secondary" style="margin-top: 8px; font-size: 11px;" onclick="editExternalSource('${escHtml(src.name)}')">
+                                    ⚙️ 配置
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    } catch (e) {
+        console.error('加载外部搜索源失败:', e);
+    }
+}
+
+// 切换外部源启用状态 - 挂载到 window
+window.toggleExternalSource = async function(name, enabled) {
+    try {
+        await api(`/api/external-sources/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            body: { enabled }
+        });
+        // 刷新计数
+        loadExternalSources();
+    } catch (e) {
+        alert('更新失败: ' + e.message);
+    }
+}
+
+// 编辑外部源 - 挂载到 window
+window.editExternalSource = function(name) {
+    // 获取当前源的数据
+    api('/api/external-sources').then(data => {
+        const source = data.sources.find(s => s.name === name);
+        if (!source) {
+            alert('未找到源: ' + name);
+            return;
+        }
+
+        // 填充表单
+        document.getElementById('externalSourceName').value = source.name;
+        document.getElementById('externalSourceNameDisplay').value = source.name;
+        document.getElementById('externalSourceType').value = source.type;
+        document.getElementById('externalSourceCategory').value = source.category;
+        document.getElementById('externalSourceDesc').value = source.description || '';
+        document.getElementById('externalSourceApiKeyRef').value = source.config?.api_key_ref || '';
+        document.getElementById('externalSourceMaxResults').value = source.config?.max_results || 20;
+        document.getElementById('externalSourceEnabled').checked = source.enabled;
+
+        // 显示弹窗
+        document.getElementById('externalSourceModal').classList.add('active');
+    });
+}
+
+// 保存外部源
+window.saveExternalSource = async function() {
+    const name = document.getElementById('externalSourceName').value;
+    const description = document.getElementById('externalSourceDesc').value;
+    const apiKeyRef = document.getElementById('externalSourceApiKeyRef').value;
+    const maxResults = parseInt(document.getElementById('externalSourceMaxResults').value);
+    const enabled = document.getElementById('externalSourceEnabled').checked;
+
+    try {
+        await api(`/api/external-sources/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            body: {
+                enabled,
+                description,
+                config: {
+                    api_key_ref: apiKeyRef,
+                    max_results: maxResults
+                }
+            }
+        });
+
+        document.getElementById('externalSourceModal').classList.remove('active');
+        loadExternalSources();
+        alert('保存成功');
+    } catch (e) {
+        alert('保存失败: ' + e.message);
+    }
 }
 
 function openFeedModal(idx) {
@@ -1236,9 +1473,76 @@ window.gotoFiltered = function(type) {
 };
 
 document.getElementById('btnSearch').addEventListener('click', () => { searchPage = 1; doSearch(); });
+document.getElementById('btnDeepResearch').addEventListener('click', () => { doDeepResearch(); });
 document.getElementById('searchKeyword').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') { searchPage = 1; doSearch(); }
+    if (e.key === 'Enter') { 
+        if (e.ctrlKey) doDeepResearch();
+        else { searchPage = 1; doSearch(); }
+    }
 });
+
+async function doDeepResearch() {
+    const keyword = document.getElementById('searchKeyword').value;
+    if (!keyword) {
+        alert('请先输入研究课题关键词');
+        document.getElementById('searchKeyword').focus();
+        return;
+    }
+
+    const btn = document.getElementById('btnDeepResearch');
+    const oldText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⌛</span> 正在深度研究中...';
+
+    // 显示一个临时的加载提示在结果区
+    const list = document.getElementById('articlesList');
+    list.innerHTML = `
+        <div class="empty-state" style="padding: 60px;">
+            <div class="loading" style="width:40px; height:40px; margin-bottom:15px; border-top-color:var(--accent);"></div>
+            <div style="font-weight:600; color:var(--accent-2); font-size:18px;">正在调动 AI 搜索引擎进行全球扫描...</div>
+            <div style="font-size:13px; margin-top:12px; opacity:0.8; max-width:400px; line-height:1.6;">
+                正在通过 Tavily, Perplexity 等引擎获取实时资讯，<br>
+                并调动智库专家构建事件时间线。请耐心等待约 30 秒。
+            </div>
+        </div>
+    `;
+
+    try {
+        const data = await api('/api/v2/research', {
+            method: 'POST',
+            body: { 
+                keyword: keyword,
+                mode: 'deep_research'
+            }
+        });
+
+        if (data.error) throw new Error(data.error);
+
+        // 研究成功后：
+        // 1. 获取新生成的时间线 ID
+        const timelineId = data.timeline?.id;
+        
+        if (timelineId) {
+            // 2. 切换到时间线页面
+            switchPage('timeline');
+            // 3. 加载并显示该时间线
+            currentTimelineId = timelineId;
+            await loadTimelineList(); // 刷新列表
+            await showTimelineDetail(timelineId); // 显示详情
+        } else {
+            console.error('API 返回成功但缺少 timeline ID', data);
+            alert('深度研究完成，但无法定位生成的时间线。请前往“事件时间线”查看。');
+        }
+
+    } catch (e) {
+        console.error('Deep Research Failed:', e);
+        list.innerHTML = `<div class="status-tag error" style="margin:20px;">研究任务失败: ${e.message}</div>`;
+        alert('研究任务失败: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = oldText;
+    }
+}
 
 async function doSearch() {
     const keyword = document.getElementById('searchKeyword').value;
@@ -1270,13 +1574,26 @@ async function doSearch() {
     if (!items.length) {
         list.innerHTML = '<div class="empty-state"><div class="icon">🔍</div>没有找到匹配的新闻</div>';
     } else {
-        list.innerHTML = items.map((i, idx) => `
+        list.innerHTML = items.map((i, idx) => {
+            const thumbUrl = getMediaThumbUrl(i.image, i.video);
+            const hasVideo = i.video && i.video.length > 0;
+            const hasImage = i.image && i.image.length > 0;
+            const hasMedia = hasVideo || hasImage;
+
+            return `
             <div class="article-item" data-id="${i.id}">
                 <div class="article-check-wrapper">
-                    <input type="checkbox" class="article-check" ${selectedArticles && selectedArticles.has(i.id) ? 'checked' : ''} 
+                    <input type="checkbox" class="article-check" ${selectedArticles && selectedArticles.has(i.id) ? 'checked' : ''}
                            onchange="toggleArticleSelection(${i.id}, '${escHtml(i.title)}', '${escHtml(i.platform)}', this.checked)">
                 </div>
-                ${i.image ? `<img class="article-thumb" src="${escHtml(i.image)}" onerror="this.style.display='none'" />` : ''}
+                ${hasMedia ? `
+                    <div class="article-thumb-wrapper">
+                        ${hasVideo ? `<a href="${escHtml(i.video)}" target="_blank" title="点击播放视频">` : `<a href="${escHtml(i.url)}" target="_blank">`}
+                        <img class="article-thumb" src="${escHtml(thumbUrl)}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 120 80%22><rect fill=%22%231c1f2e%22 width=%22120%22 height=%2280%22/><text x=%2260%22 y=%2245%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2216%22>📰</text></svg>'" />
+                        ${hasVideo ? '<div class="video-play-icon">▶</div>' : ''}
+                        </a>
+                    </div>
+                ` : ''}
                 <div class="article-body">
                     <div class="article-title"><a href="${escHtml(i.url)}" target="_blank">${escHtml(i.title)}</a></div>
                     <div class="article-meta">
@@ -1286,6 +1603,7 @@ async function doSearch() {
                         <span>📰 ${escHtml(i.platform || '')}</span>
                         <span>🕐 ${fmtTime(i.published)}</span>
                         <span>📁 ${escHtml(i.media_group || '')}</span>
+                        ${hasVideo ? '<span style="color:#ef4444;">🎬 视频</span>' : ''}
                     </div>
                     <div class="article-summary">
                         ${escHtml(i.summary || '')}
@@ -1293,7 +1611,7 @@ async function doSearch() {
                     </div>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
     }
 
 window.showContent = function(idx) {

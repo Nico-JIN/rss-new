@@ -1,5 +1,84 @@
+external_sources:
+- category: 社交媒体
+  config:
+    api_key_ref: new1_5b6d85470985409db615a790af404fd6
+    max_results: 20
+    sort_order: Latest
+  description: Twitter/X 推文搜索
+  enabled: true
+  name: Twitter
+  type: social_media
+- category: 社交媒体
+  config:
+    api_key_ref: 4f1a15e046ad9bf9cc9554da215c1cfc1ec37dff1a2c4b4d38793872b2e058f8
+    max_results: 15
+    sort_order: Latest
+  description: YouTube 视频搜索 (SerpApi)
+  enabled: true
+  name: YouTube
+  type: social_media
+- category: 社交媒体
+  config:
+    client_id: ''
+    client_secret: ''
+    max_results: 15
+    sort_order: relevance
+  description: Reddit 帖子搜索 (官方API，免费100QPM)
+  enabled: true
+  name: Reddit
+  type: social_media
+- category: 搜索引擎
+  config:
+    api_key_ref: 4f1a15e046ad9bf9cc9554da215c1cfc1ec37dff1a2c4b4d38793872b2e058f8
+    country: US
+    lang: en
+  description: Google News API (SerpApi)
+  enabled: true
+  name: Google News
+  type: search_engine
+- category: 搜索引擎
+  config:
+    api_key_ref: 4f1a15e046ad9bf9cc9554da215c1cfc1ec37dff1a2c4b4d38793872b2e058f8
+    country: US
+  description: Bing News API (SerpApi)
+  enabled: true
+  name: Bing News
+  type: search_engine
+- category: 新闻聚合
+  config:
+    api_key_ref: fafb8cfeb51e4daf8812f78021af310e
+    max_results: 30
+  description: NewsAPI.org 聚合新闻搜索
+  enabled: true
+  name: NewsAPI
+  type: news_aggregator
+- category: AI搜索引擎
+  config:
+    api_key_ref: perplexity_key
+    max_results: 10
+  description: Perplexity AI 联网答案搜索
+  enabled: true
+  name: Perplexity
+  type: ai_search_engine
+- category: AI搜索引擎
+  config:
+    api_key_ref: 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
+    max_results: 10
+  description: Tavily AI 优化搜索引擎
+  enabled: true
+  name: Tavily
+  type: ai_search_engine
+- category: AI搜索引擎
+  config:
+    api_key_ref: brave_key
+    max_results: 20
+  description: Brave privacy search
+  enabled: true
+  name: Brave Search
+  type: ai_search_engine
 feeds:
-- country: 新加坡
+- city: 新加坡
+  country: 新加坡
   fetch_jina: true
   media_group: 联合早报
   platform: 联合早报|国际新闻
@@ -7,7 +86,8 @@ feeds:
   time_only: true
   timeout: 30
   url: https://rss.app/feeds/NqwvqfwhwrKv9eya.xml
-- country: 新加坡
+- city: 新加坡
+  country: 新加坡
   fetch_jina: true
   media_group: 联合早报
   platform: 联合早报|中国新闻
@@ -15,138 +95,317 @@ feeds:
   time_only: true
   timeout: 30
   url: https://rss.app/feeds/fKGzBfhuydHw3geo.xml
-- country: 美国
+- city: 华盛顿
+  country: 美国
   media_group: PBS
-  platform: 美国政治
+  platform: PBS|美国政治
   timeout: 30
   url: https://rss.app/feeds/tR6OOiFleWnfeWvJ.xml
-- country: 英国
+- city: 北京
+  country: 英国
   media_group: 路透社
   platform: 路透社|China
   timeout: 30
   url: https://rss.app/feeds/GoaYdKMysAJ2wh0N.xml
-- country: 美国
+- city: 伦敦
+  country: 英国
+  fetch_jina: false
   media_group: 路透社
   platform: 路透社|US
+  scrape_url: ''
+  time_only: false
   timeout: 30
   url: https://rss.app/feeds/3SzXJwOJT9A9HLic.xml
-- country: 英国
+- city: 伦敦
+  country: 英国
   media_group: 路透社
   platform: 路透社|x.com
   timeout: 30
   url: https://rss.app/feeds/pxSbEqhWbTfVocb4.xml
-- country: 英国
+- city: 东京
+  country: 英国
   media_group: 路透社
   platform: 路透社|Japan
   timeout: 30
   url: https://rss.app/feeds/cCw9aLOr3IJQImEl.xml
-- country: 美国
+- city: 北京
+  country: 美国
   media_group: 纽约时报
-  platform: 纽约时报|china
+  platform: 纽约时报|China
   timeout: 30
   url: https://rss.app/feeds/vO1vKL4xXqrKIWab.xml
-- country: 美国
+- city: 纽约
+  country: 美国
   media_group: 纽约时报
   platform: 纽约时报|官网
   timeout: 30
   url: https://rss.app/feeds/MhUGsT90ZRDAUPyH.xml
-- country: 美国
+- city: 纽约
+  country: 美国
   media_group: CNN
-  platform: CNN官网|world
+  platform: CNN|World
   timeout: 30
   url: https://rss.app/feeds/vrnuIYnatTBL2WKe.xml
-- country: 美国
+- city: 北京
+  country: 美国
   media_group: CNN
   platform: CNN|China
   timeout: 30
   url: https://rss.app/feeds/e6Epd6MGVavZouJl.xml
-- country: 美国
+- city: 华盛顿
+  country: 美国
   media_group: 华盛顿邮报
-  platform: 'washingtonpost|White House '
+  platform: 华盛顿邮报|White House
   timeout: 30
   url: https://rss.app/feeds/MYOaR8UWegn5jyfc.xml
-- country: 美国
+- city: 华盛顿
+  country: 美国
   media_group: 华盛顿邮报
-  platform: 'washingtonpost|White House '
+  platform: 华盛顿邮报|White House
   timeout: 30
   url: https://rss.app/feeds/ls6F732pV7N93OmE.xml
-- country: 美国
+- city: 华盛顿
+  country: 美国
   media_group: 华盛顿邮报
-  platform: washingtonpost|Opinions
+  platform: 华盛顿邮报|Opinions
   timeout: 30
   url: https://rss.app/feeds/6MgtxEEQL3RAsMlL.xml
-- country: 美国
-  media_group: 美国众议议院（CCP）
+- city: 华盛顿
+  country: 美国
+  media_group: 美国众议院
   platform: 美国众议院
   timeout: 30
   url: https://rss.app/feeds/8gETqnSSE4IFWMuZ.xml
-- country: 日本
+- city: 东京
+  country: 日本
   fetch_jina: false
   media_group: NHK
   platform: NHK（日本放送协会）
   scrape_url: https://www3.nhk.or.jp/nhkworld/zh/news/
   timeout: 30
   url: https://www3.nhk.or.jp/nhkworld/zh/news/
-- country: 日本
+- city: 东京
+  country: 日本
   media_group: 共同社
-  platform: 共同社 (Kyodo News)
+  platform: 共同社
   timeout: 30
   url: https://rss.app/feeds/O4AiW7fxDN6C6H5D.xml
-- country: 英国
+- city: 伦敦
+  country: 英国
   media_group: BBC
   platform: BBC|x.com
   timeout: 30
   url: https://rss.app/feeds/9Rx7qXQGKoV0q4Dl.xml
-- country: 英国
+- city: 伦敦
+  country: 英国
   media_group: BBC
-  platform: Google News
+  platform: BBC|Google News
   timeout: 30
   url: https://rss.app/feeds/yNjx9c29THw4aj5p.xml
-- country: 日本
+- city: 东京
+  country: 日本
   media_group: 共同网
   platform: 共同网
   timeout: 30
   url: https://rss.app/feeds/9hfOqIWOIRYGxl9M.xml
-- country: 韩国
+- city: 首尔
+  country: 韩国
   media_group: 韩联社
   platform: 韩联社
   timeout: 30
   url: https://rss.app/feeds/YNFZbio3L63ri2yv.xml
-- country: 俄罗斯
-  media_group: 俄罗斯卫星通信社
-  platform: 俄罗斯卫星通信社
+- city: 莫斯科
+  country: 俄罗斯
+  fetch_jina: false
+  media_group: 俄罗斯卫星通讯社
+  platform: 俄罗斯卫星通讯社
+  scrape_url: ''
+  time_only: true
   timeout: 30
   url: https://rss.app/feeds/2s52rzRgdnH3g2j8.xml
-- country: 美国
+- city: 纽约
+  country: 美国
   media_group: 纽约时报
   platform: 纽约时报
   timeout: 30
   url: https://rss.app/feeds/EdaqV6KSPoxu0eya.xml
-- country: 美国
+- city: 纽约
+  country: 美国
   media_group: 彭博社
   platform: 彭博社
   timeout: 30
   url: https://rss.app/feeds/KeSi7yXakSMmBsZu.xml
-- country: 日本
+- city: 东京
+  country: 日本
+  fetch_jina: false
   media_group: 日经中文网
   platform: 日经中文网
+  scrape_url: ''
+  time_only: true
   timeout: 30
   url: https://rss.app/feeds/k3QuxKgJEBSRF4Fw.xml
-- country: 中国香港
+- city: 香港
+  country: 中国香港
   media_group: SCMP
   platform: 南华早报
   timeout: 30
   url: https://rss.app/feeds/dgewlTGu67rgE5XY.xml
-- country: 中国香港
+- city: 香港
+  country: 中国香港
   media_group: SCMP
   platform: 南华早报
   timeout: 30
   url: https://rss.app/feeds/PwB79KgLHxoICdoS.xml
-- country: 中国香港
+- city: 香港
+  country: 中国香港
   media_group: SCMP
   platform: 南华早报
   timeout: 30
   url: https://rss.app/feeds/7f6jueb2W7rXqz0V.xml
+- city: 纽约
+  country: 美国
+  fetch_jina: false
+  media_group: Reddit
+  platform: Reddit
+  scrape_url: ''
+  time_only: false
+  timeout: 30
+  url: https://rss.app/feeds/w9ef4t0gJ9SpXZYa.xml
+- city: 纽约
+  country: 美国
+  fetch_jina: false
+  media_group: 美联社
+  platform: 美联社
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/JKZbL25cfHb9dngn.xml
+- city: 柏林
+  country: 德国
+  fetch_jina: false
+  media_group: 德国之声
+  platform: 德国之声|DW
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/GMpPodY6W12Tx9TH.xml
+- city: 孟买
+  country: 印度
+  fetch_jina: false
+  media_group: 经济时报
+  platform: 印度经济时报
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/GL9Ju9gyalZAAb5z.xml
+- city: 孟买
+  country: 印度
+  fetch_jina: false
+  media_group: 经济时报
+  platform: 印度经济时报|World
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/ImE4wbJc8fm7te3A.xml
+- city: 巴黎
+  country: 法国
+  fetch_jina: false
+  media_group: 法国24
+  platform: 法国24电视台
+  scrape_url: ''
+  time_only: false
+  timeout: 30
+  url: https://rss.app/feeds/JNLsn3GOxbFnkf2B.xml
+- city: 辛辛那提
+  country: 美国
+  fetch_jina: false
+  media_group: Scripps News
+  platform: Scripps News
+  scrape_url: ''
+  time_only: false
+  timeout: 30
+  url: https://rss.app/feeds/DLGSvXLP2JNT057e.xml
+- city: 多伦多
+  country: 加拿大
+  fetch_jina: false
+  media_group: CBC
+  platform: 加拿大广播公司
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/yAK0fJFS20dISNCL.xml
+- city: 香港
+  country: 美国
+  fetch_jina: false
+  media_group: 彭博社
+  platform: 彭博社|亚洲
+  scrape_url: ''
+  time_only: false
+  timeout: 30
+  url: https://rss.app/feeds/oa2M0Haam46KWLxy.xml
+- city: 多伦多
+  country: 加拿大
+  fetch_jina: false
+  media_group: 金融邮报
+  platform: 加拿大金融邮报
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/BXclE2vDdRMxRoMH.xml
+- city: 华盛顿
+  country: 美国
+  fetch_jina: false
+  media_group: 美国国防部
+  platform: 美国国防部
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/2cqXm5dFNz2NFbFz.xml
+- city: ''
+  country: 美国
+  fetch_jina: false
+  media_group: 美联社
+  platform: 美联社|NEWS
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/VDc3hwn0e44WtQxp.xml
+- city: ''
+  country: 美国
+  fetch_jina: false
+  media_group: 美联社
+  platform: 美联社|X.COM
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/qsyOLyaS0ChwJoTc.xml
+- city: ''
+  country: 美国
+  fetch_jina: false
+  media_group: 彭博社
+  platform: 彭博社|X.com
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/6bz3AmvZZt1ZsB9p.xml
+- city: 伦敦
+  country: 英国
+  fetch_jina: false
+  media_group: BBC
+  platform: BBC|@BBCBreaking
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/mIj4qUMHZGEpYvXn.xml
+- city: ''
+  country: 美国
+  fetch_jina: false
+  media_group: CNN
+  platform: CNN|X.COM
+  scrape_url: ''
+  time_only: false
+  timeout: 30
+  url: https://rss.app/feeds/Lndp9pfheU9lQH41.xml
 settings:
   auto_fetch: true
   interval_min: 20

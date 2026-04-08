@@ -381,15 +381,29 @@ def extract_time_from_html(html: str) -> datetime:
     return None
 
 def get_image(entry) -> str:
+    # 1. media_thumbnail
     for m in getattr(entry, 'media_thumbnail', []):
         if m.get('url'): return m['url']
+        
+    # 2. media_content (通用多媒体内容)
+    for m in getattr(entry, 'media_content', []):
+        if m.get('medium') == 'image' and m.get('url'):
+            return m['url']
+        if m.get('url') and not m.get('medium'):
+            # 兜底：如果没标记 medium 但有 URL，尝试采纳
+            return m['url']
+            
+    # 3. enclosures (附件)
     for e in getattr(entry, 'enclosures', []):
         if 'image' in e.get('type', ''): return e.get('href', '')
+        
+    # 4. summary / content (HTML 提取)
     for f in ('summary', 'content'):
         t = getattr(entry, f, '')
         if isinstance(t, list): t = t[0].get('value', '') if t else ''
         m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', t or '')
         if m: return m.group(1)
+        
     return ''
 
 
@@ -647,24 +661,24 @@ def main():
                 cutoff = cutoff.replace(tzinfo=TZ_BJ)
             print(f'[INFO] 使用指定起始时间: {cutoff.strftime("%Y-%m-%d %H:%M:%S")}', file=sys.stderr)
         except Exception:
-            cutoff = now - timedelta(hours=24)
-            print('[WARN] 指定起始时间解析失败，回退至24h', file=sys.stderr)
+            cutoff = now - timedelta(hours=48)
+            print('[WARN] 指定起始时间解析失败，回退至48h', file=sys.stderr)
     elif args.hours is not None:
         cutoff = now - timedelta(hours=args.hours)
         print(f'[INFO] 使用指定时间窗口: {args.hours}h', file=sys.stderr)
     elif last_fetch_at_str:
         try:
-            cutoff = datetime.fromisoformat(last_fetch_at_str)
-            if cutoff.tzinfo is None:
-                cutoff = cutoff.replace(tzinfo=TZ_BJ)
-            # 输出到 stderr 以便主进程捕获
-            print(f'[INCREMENTAL] 从上次拉取节点开始: {cutoff.strftime("%Y-%m-%d %H:%M:%S")}', file=sys.stderr)
+            # 修复：不能严格使用 last_fetch_at 作为过滤基准
+            # 因为像 rss.app 这样的第三方源常常有延迟，真实发布时间如果早于 last_fetch_at 就会被永久丢弃
+            # 我们放宽到 72 小时，依赖 seen_urls 和 seen_titles 来做精确增量去重
+            cutoff = now - timedelta(hours=72)
+            print(f'[INCREMENTAL] 使用放宽的时间窗口 (近72h) 防止误杀延迟源', file=sys.stderr)
         except Exception:
-            cutoff = now - timedelta(hours=24)
-            print('[WARN] 上次拉取时间解析失败，回退至24h', file=sys.stderr)
+            cutoff = now - timedelta(hours=72)
+            print('[WARN] 上次拉取时间解析失败，回退至72h', file=sys.stderr)
     elif is_first and not args.full:
-        cutoff = now - timedelta(hours=24)
-        print('[INFO] 首次运行，默认保留近24h', file=sys.stderr)
+        cutoff = now - timedelta(hours=48)
+        print('[INFO] 首次运行，默认保留近48h', file=sys.stderr)
     else:
         cutoff = None
 
@@ -718,7 +732,8 @@ def main():
                                 'article_idx': a_idx + 1,
                                 'article_total': len(scraped),
                                 'article_title': article['title'][:50] + ('...' if len(article['title']) > 50 else ''),
-                                'article_time': article['_dt'].strftime('%m-%d %H:%M') if article['_dt'] else ''
+                                'article_time': article['_dt'].strftime('%m-%d %H:%M') if article['_dt'] else '',
+                                'image': article.get('image', '')
                             }, ensure_ascii=False), file=sys.stderr)
                         except: pass
                     item = {
@@ -833,6 +848,7 @@ def main():
                             'article_total': total_entries,
                             'article_title': title[:50] + ('...' if len(title) > 50 else ''),
                             'article_time': final_dt.strftime('%m-%d %H:%M') if final_dt else '',
+                            'image': get_image(e),
                             'is_new': is_new
                         }, ensure_ascii=False), file=sys.stderr)
                     except:
@@ -1062,22 +1078,9 @@ def main():
                 with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                     list(executor.map(translate_content_task, content_tasks))
 
-    # 5. 更新状态
-    def update_seen(old, new_set, maxlen):
-        res = list(old)
-        old_set = set(old)
-        for h in new_set:
-            if h not in old_set:
-                res.append(h)
-        return res[-maxlen:]
-
-    STATE.write_text(json.dumps({
-        'seen_urls':   update_seen(state.get('seen_urls', []),   {i['uh'] for i in all_new}, KEEP),
-        'seen_titles': update_seen(state.get('seen_titles', []), {i['th'] for i in all_new}, KEEP),
-        'last_fetch_at': now.isoformat(),
-    }, ensure_ascii=False), 'utf-8')
-
     # 4.5 SQLite 入库
+    db_inserted = 0
+    db_failed_items = []  # 记录入库失败的文章，供状态更新使用
     try:
         from store import init_db, get_conn, upsert_articles
         conn = get_conn()
@@ -1085,23 +1088,50 @@ def main():
         db_items = []
         for item in all_new:
             db_items.append({
-                'url_hash': item['uh'],
+                'url_hash':   item['uh'],
                 'title_hash': item['th'],
-                'url': item['url'],
-                'title': item['title'],
-                'platform': item['platform'],
+                'url':        item['url'],
+                'title':      item['title'],
+                'platform':   item['platform'],
                 'media_group': item['_mg'],
-                'country': item.get('country', ''),
-                'published': item['published'],
-                'summary': item.get('summary', ''),
-                'content': item.get('content', ''),
-                'image': item.get('image', ''),
+                'country':    item.get('country', ''),
+                'published':  item['published'],
+                'summary':    item.get('summary', ''),
+                'content':    item.get('content', ''),
+                'image':      item.get('image', ''),
+                'video':      item.get('video', ''),
+                'llm_tags':   item.get('llm_tags', '[]'),
             })
         db_inserted = upsert_articles(db_items, conn=conn)
         conn.close()
+        print(f'[INFO] SQLite 入库成功: {db_inserted} 条新记录 (共处理 {len(db_items)} 条)', file=sys.stderr)
     except Exception as e:
         db_inserted = -1
-        print(f'[WARN] SQLite 入库失败: {e}', file=sys.stderr)
+        print(f'[ERROR] SQLite 入库失败: {e}', file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+
+    # 5. 更新状态 — 必须在入库成功后才写 state.json
+    # 如果在入库之前就写入 state.json，一旦入库失败，这些文章将被永久丢失：
+    # 它们既不在数据库里，也已被标记为「已见过」不会被再次拉取
+    if db_inserted >= 0:  # 只有入库未发生异常才更新 seen 状态
+        def update_seen(old, new_set, maxlen):
+            res = list(old)
+            old_set = set(old)
+            for h in new_set:
+                if h not in old_set:
+                    res.append(h)
+            return res[-maxlen:]
+
+        STATE.write_text(json.dumps({
+            'seen_urls':     update_seen(state.get('seen_urls', []),   {i['uh'] for i in all_new}, KEEP),
+            'seen_titles':   update_seen(state.get('seen_titles', []), {i['th'] for i in all_new}, KEEP),
+            'last_fetch_at': now.isoformat(),
+        }, ensure_ascii=False), 'utf-8')
+        print(f'[INFO] state.json 已更新，seen_urls={len(state.get("seen_urls", []))+len(all_new)} 条', file=sys.stderr)
+    else:
+        print(f'[WARN] 由于入库异常，state.json 未更新，下次抓取将重试这些文章', file=sys.stderr)
+
 
     # 4.6 LLM 语义打标（异步，不阻断入库）
     try:
@@ -1134,6 +1164,7 @@ def main():
         'merged_global_count': len(global_dup_titles),
         'historical_filtered_count': incremental_filtered,
         'final_count': len(timed_final),
+        'db_inserted': db_inserted,  # 新增：实际入库条数
         'dup_intra_titles': dup_intra_titles,
         'dup_global_titles': global_dup_titles
     }

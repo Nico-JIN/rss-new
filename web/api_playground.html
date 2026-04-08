@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Playground — 数据接口测试</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #111827;
+      --bg-card: #1a1f2e;
+      --bg-input: #0d1117;
+      --border: #2a3041;
+      --border-focus: #4f8eff;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #484f58;
+      --accent-blue: #4f8eff;
+      --accent-green: #3fb950;
+      --accent-orange: #d29922;
+      --accent-red: #f85149;
+      --accent-purple: #a371f7;
+      --accent-cyan: #39d3c8;
+      --gradient-1: linear-gradient(135deg, #4f8eff 0%, #a371f7 100%);
+      --gradient-2: linear-gradient(135deg, #3fb950 0%, #39d3c8 100%);
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(180deg, rgba(79,142,255,0.08) 0%, transparent 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      background: var(--gradient-1);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header .back-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      transition: all 0.2s;
+    }
+    .header .back-link:hover {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    /* ── Tab Navigation ── */
+    .tab-nav {
+      display: flex;
+      gap: 4px;
+      padding: 16px 32px 0;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .tab-btn {
+      padding: 12px 20px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tab-btn:hover { color: var(--text-primary); }
+    .tab-btn.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+    }
+    .tab-icon { font-size: 16px; }
+
+    /* ── Main Layout ── */
+    .main { padding: 24px 32px; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ── Panel Layout ── */
+    .panel-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 24px;
+      min-height: calc(100vh - 200px);
+    }
+
+    /* ── Params Card ── */
+    .params-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      height: fit-content;
+      position: sticky;
+      top: 24px;
+    }
+    .params-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(79,142,255,0.15);
+    }
+    .form-group input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .btn-execute {
+      width: 100%;
+      padding: 12px;
+      background: var(--gradient-1);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 20px;
+    }
+    .btn-execute:hover { opacity: 0.9; }
+    .btn-execute:active { transform: scale(0.98); }
+    .btn-execute:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-execute.loading {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+    }
+
+    /* ── CLI Preview ── */
+    .cli-preview {
+      margin-top: 16px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--accent-green);
+      word-break: break-all;
+      position: relative;
+    }
+    .cli-preview::before {
+      content: 'CLI 命令';
+      display: block;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .cli-copy {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+    }
+    .cli-copy:hover { color: var(--text-primary); }
+
+    /* ── Results Card ── */
+    .results-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .results-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .results-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .results-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .results-meta .badge {
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-ok { background: rgba(63,185,80,0.15); color: var(--accent-green); }
+    .badge-err { background: rgba(248,81,73,0.15); color: var(--accent-red); }
+    .badge-time { background: rgba(79,142,255,0.15); color: var(--accent-blue); }
+
+    .results-body {
+      flex: 1;
+      overflow: auto;
+      max-height: calc(100vh - 280px);
+    }
+
+    /* ── JSON Viewer ── */
+    .json-view {
+      padding: 16px 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      color: var(--text-primary);
+    }
+    .json-view .key { color: var(--accent-cyan); }
+    .json-view .string { color: var(--accent-green); }
+    .json-view .number { color: var(--accent-orange); }
+    .json-view .boolean { color: var(--accent-purple); }
+    .json-view .null { color: var(--text-muted); }
+
+    /* ── Empty State ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 32px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .empty-state .icon { font-size: 48px; opacity: 0.3; margin-bottom: 16px; }
+    .empty-state p { font-size: 14px; }
+
+    /* ── Visual Result Cards ── */
+    .result-list { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+    .result-item {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      transition: border-color 0.2s;
+    }
+    .result-item:hover { border-color: var(--accent-blue); }
+    .result-item .item-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+    .result-item .item-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .result-item .item-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* ── Score Bars (Value Analysis) ── */
+    .score-bar-group { margin-top: 12px; }
+    .score-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .score-bar .label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      width: 80px;
+      text-align: right;
+    }
+    .score-bar .bar {
+      flex: 1;
+      height: 8px;
+      background: var(--bg-input);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .score-bar .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.6s ease;
+    }
+    .score-bar .value {
+      font-size: 13px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      width: 30px;
+    }
+
+    /* ── View Toggle ── */
+    .view-toggle {
+      display: flex;
+      gap: 4px;
+    }
+    .view-toggle button {
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 6px;
+      font-family: inherit;
+    }
+    .view-toggle button.active {
+      background: var(--accent-blue);
+      color: #fff;
+      border-color: var(--accent-blue);
+    }
+
+    /* ── CLI Source Code ── */
+    .cli-source {
+      padding: 20px;
+      display: none;
+    }
+    .code-block {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-primary);
+      position: relative;
+      overflow-x: auto;
+    }
+    .code-block::before {
+      content: 'PYTHON 调用示例';
+      display: block;
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      font-family: 'Inter', sans-serif;
+    }
+    .code-keyword { color: var(--accent-purple); }
+    .code-string { color: var(--accent-green); }
+    .code-comment { color: var(--text-muted); }
+    .code-func { color: var(--accent-blue); }
+
+    /* ── Hotspot Card ── */
+    .hotspot-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .hotspot-rank {
+      font-size: 24px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent-blue);
+      margin-right: 12px;
+    }
+    .hotspot-header { display: flex; align-items: flex-start; margin-bottom: 10px; }
+    .hotspot-title { font-size: 15px; font-weight: 600; }
+    .hotspot-score {
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: rgba(79,142,255,0.15);
+      color: var(--accent-blue);
+      font-family: 'JetBrains Mono', monospace;
+      margin-left: auto;
+    }
+    .hotspot-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .hotspot-tags .tag {
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      background: rgba(163,113,247,0.1);
+      color: var(--accent-purple);
+      border: 1px solid rgba(163,113,247,0.2);
+    }
+
+    /* ── External Engine Checkbox Group ── */
+    .engine-checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .engine-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .engine-checkbox:hover { background: rgba(255,255,255,0.05); }
+    .engine-checkbox.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      background: transparent;
+    }
+    .engine-checkbox input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent-blue);
+    }
+    .engine-checkbox .engine-name {
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    .engine-checkbox .engine-status {
+      font-size: 11px;
+      color: var(--accent-green);
+      margin-left: auto;
+    }
+    .engine-checkbox.disabled .engine-status {
+      color: var(--text-muted);
+    }
+
+    /* ── Source Category Badge ── */
+    .source-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .source-badge.main-media {
+      background: rgba(79,142,255,0.15);
+      color: var(--accent-blue);
+      border: 1px solid rgba(79,142,255,0.3);
+    }
+    .source-badge.web-supplement {
+      background: rgba(63,185,80,0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(63,185,80,0.3);
+    }
+
+    @media (max-width: 900px) {
+      .panel-grid { grid-template-columns: 1fr; }
+      .params-card { position: static; }
+      .tab-nav { padding: 12px 16px 0; }
+      .main { padding: 16px; }
+      .header { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚡ API Playground</h1>
+  <a href="/" class="back-link">← 返回控制台</a>
+</div>
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('feed')"><span class="tab-icon">📡</span> 全量内容</button>
+  <button class="tab-btn" onclick="switchTab('search')"><span class="tab-icon">🔍</span> 关键字搜索</button>
+  <button class="tab-btn" onclick="switchTab('hotspot')"><span class="tab-icon">🔥</span> 热点捕获</button>
+  <button class="tab-btn" onclick="switchTab('research')"><span class="tab-icon">🔬</span> 深度研究</button>
+  <button class="tab-btn" onclick="switchTab('value')"><span class="tab-icon">💎</span> 价值分析</button>
+</div>
+
+<div class="main">
+
+  <!-- ═══ Panel 1: Feed ═══ -->
+  <div class="panel active" id="panel-feed">
+    <div class="panel-grid">
+      <div class="params-card">
+        <h3>📡 全量内容获取</h3>
+        <div class="form-group">
+          <label>时间窗口 (小时)</label>
+          <input type="number" id="feed-hours" value="6" min="1" max="720" placeholder="6">
+        </div>
+        <div class="form-group">
+          <label>最大条数</label>
+          <input type="number" id="feed-limit" value="200" min="1" max="2000">
+        </div>
+        <button class="btn-execute" id="feed-btn" onclick="execFeed()">▶ 执行查询</button>
+        <div class="cli-preview" id="feed-cli">
+          <button class="cli-copy" onclick="copyText('feed-cli-cmd')">📋</button>
+          <span id="feed-cli-cmd">python scripts/api_cli.py feed --hours 6 --limit 200</span>
+        </div>
+      </div>
+      <div class="results-card">
+        <div class="results-header">
+          <h3>📋 响应结果</h3>
+          <div class="results-meta" id="feed-meta"></div>
+          <div class="view-toggle">
+            <button class="active" onclick="setViewMode('feed', 'visual')">页面展示</button>
+            <button onclick="setViewMode('feed', 'cli')">CLI 源码 (JSON)</button>
+          </div>
+        </div>
+        <div class="results-body">
+          <div class="empty-state" id="feed-empty"><div class="icon">📡</div><p>设置参数并点击"执行查询"</p></div>
+          <div class="result-list" id="feed-visual" style="display:none;"></div>
+          <div class="json-view" id="feed-result" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Panel 2: Search ═══ -->
+  <div class="panel" id="panel-search">
+    <div class="panel-grid">
+      <div class="params-card">
+        <h3>🔍 关键字搜索</h3>
+        <div class="form-group">
+          <label>关键字 *</label>
+          <input type="text" id="search-keyword" placeholder="例如：中国、关税、特朗普">
+        </div>
+        <div class="form-group">
+          <label>时间窗口 (小时)</label>
+          <input type="number" id="search-hours" value="6" min="1" max="720">
+        </div>
+        <div class="form-group">
+          <label>国家过滤</label>
+          <input type="text" id="search-country" placeholder="例如：美国">
+        </div>
+        <div class="form-group">
+          <label>最大条数</label>
+          <input type="number" id="search-limit" value="100" min="1" max="500">
+        </div>
+        <div class="form-group">
+          <label>外部搜索引擎</label>
+          <div id="external-engines-list" class="engine-checkbox-group">
+            <!-- 动态加载 -->
+          </div>
+        </div>
+        <button class="btn-execute" id="search-btn" onclick="execSearch()">▶ 执行搜索</button>
+        <div class="cli-preview" id="search-cli">
+          <button class="cli-copy" onclick="copyText('search-cli-cmd')">📋</button>
+          <span id="search-cli-cmd">python scripts/api_cli.py search --keyword "中国" --hours 6</span>
+        </div>
+      </div>
+      <div class="results-card">
+        <div class="results-header">
+          <h3>📋 搜索结果</h3>
+          <div class="results-meta" id="search-meta"></div>
+          <div class="view-toggle">
+            <button class="active" onclick="setViewMode('search', 'visual')">页面展示</button>
+            <button onclick="setViewMode('search', 'cli')">CLI 源码 (JSON)</button>
+          </div>
+        </div>
+        <div class="results-body">
+          <div class="empty-state" id="search-empty"><div class="icon">🔍</div><p>输入关键字并执行搜索</p></div>
+          <div class="result-list" id="search-visual" style="display:none;"></div>
+          <div class="json-view" id="search-result" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Panel 3: Hotspot ═══ -->
+  <div class="panel" id="panel-hotspot">
+    <div class="panel-grid">
+      <div class="params-card">
+        <h3>🔥 热点捕获</h3>
+        <div class="form-group">
+          <label>时间窗口 (小时)</label>
+          <input type="number" id="hotspot-hours" value="24" min="1" max="168">
+        </div>
+        <div class="form-group">
+          <label>最大热点数</label>
+          <input type="number" id="hotspot-max" value="10" min="1" max="50">
+        </div>
+        <div class="form-group">
+          <label>分类关键字 (可选)</label>
+          <input type="text" id="hotspot-keyword" placeholder="例如：中国、国际、周边">
+        </div>
+        <button class="btn-execute" id="hotspot-btn" onclick="execHotspot()">▶ 检测热点</button>
+        <div class="cli-preview" id="hotspot-cli">
+          <button class="cli-copy" onclick="copyText('hotspot-cli-cmd')">📋</button>
+          <span id="hotspot-cli-cmd">python scripts/api_cli.py hotspot --hours 24 --max 10</span>
+        </div>
+      </div>
+      <div class="results-card">
+        <div class="results-header">
+          <h3>📋 热点事件</h3>
+          <div class="results-meta" id="hotspot-meta"></div>
+          <div class="view-toggle">
+            <button class="active" onclick="setViewMode('hotspot', 'visual')">页面展示</button>
+            <button onclick="setViewMode('hotspot', 'cli')">CLI 源码 (JSON)</button>
+          </div>
+        </div>
+        <div class="results-body">
+          <div class="empty-state" id="hotspot-empty"><div class="icon">🔥</div><p>点击"检测热点"开始分析</p></div>
+          <div class="result-list" id="hotspot-visual" style="display:none;"></div>
+          <div class="json-view" id="hotspot-result" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Panel 4: Research ═══ -->
+  <div class="panel" id="panel-research">
+    <div class="panel-grid">
+      <div class="params-card">
+        <h3>🔬 深度研究</h3>
+        <div class="form-group">
+          <label>研究主题/关键字</label>
+          <input type="text" id="research-keyword" placeholder="例如：特朗普关税">
+        </div>
+        <div class="form-group">
+          <label>研究模式</label>
+          <select id="research-mode">
+            <option value="standard">标准模式 (本地关键字)</option>
+            <option value="deep_research">AI 深度研究 (实时全网扫描)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>搜索时间窗口 (小时)</label>
+          <input type="number" id="research-hours" value="72" min="1" max="720">
+        </div>
+        <div class="form-group">
+          <label>或 文章 ID (逗号分隔)</label>
+          <input type="text" id="research-ids" placeholder="例如：100,101,102">
+        </div>
+        <button class="btn-execute" id="research-btn" onclick="execResearch()">▶ 启动研究</button>
+        <div class="cli-preview" id="research-cli">
+          <button class="cli-copy" onclick="copyText('research-cli-cmd')">📋</button>
+          <span id="research-cli-cmd">python scripts/api_cli.py research --keyword "特朗普关税" --hours 72</span>
+        </div>
+      </div>
+      <div class="results-card">
+        <div class="results-header">
+          <h3>📋 研究结果 / 时间线</h3>
+          <div class="results-meta" id="research-meta"></div>
+          <div class="view-toggle">
+            <button class="active" onclick="setViewMode('research', 'visual')">页面展示</button>
+            <button onclick="setViewMode('research', 'cli')">CLI 源码 (JSON)</button>
+          </div>
+        </div>
+        <div class="results-body">
+          <div class="empty-state" id="research-empty"><div class="icon">🔬</div><p>输入关键字或文章 ID 启动深度研究</p></div>
+          <div class="result-list" id="research-visual" style="display:none;"></div>
+          <div class="json-view" id="research-result" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Panel 5: Value ═══ -->
+  <div class="panel" id="panel-value">
+    <div class="panel-grid">
+      <div class="params-card">
+        <h3>💎 价值分析</h3>
+        <div class="form-group">
+          <label>文章 ID (单篇)</label>
+          <input type="text" id="value-id" placeholder="例如：100">
+        </div>
+        <div class="form-group">
+          <label>或 多篇 ID (逗号分隔)</label>
+          <input type="text" id="value-ids" placeholder="例如：100,101,102">
+        </div>
+        <button class="btn-execute" id="value-btn" onclick="execValue()">▶ 专家评估</button>
+        <div class="cli-preview" id="value-cli">
+          <button class="cli-copy" onclick="copyText('value-cli-cmd')">📋</button>
+          <span id="value-cli-cmd">python scripts/api_cli.py value --article-id 100</span>
+        </div>
+      </div>
+      <div class="results-card">
+        <div class="results-header">
+          <h3>📋 评估报告</h3>
+          <div class="results-meta" id="value-meta"></div>
+          <div class="view-toggle">
+            <button class="active" onclick="setViewMode('value', 'visual')">页面展示</button>
+            <button onclick="setViewMode('value', 'cli')">CLI 源码 (JSON)</button>
+          </div>
+        </div>
+        <div class="results-body">
+          <div class="empty-state" id="value-empty"><div class="icon">💎</div><p>输入文章 ID 获取专家评估</p></div>
+          <div class="result-list" id="value-visual" style="display:none;"></div>
+          <div class="json-view" id="value-result" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// Tab switching
+// ═══════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════
+// Utilities
+// ═══════════════════════════════════════════════
+function setViewMode(panel, mode) {
+  const container = document.getElementById('panel-' + panel);
+  const buttons = container.querySelectorAll('.view-toggle button');
+  buttons.forEach(btn => btn.classList.toggle('active', (mode === 'visual' && btn.innerText.includes('页面')) || (mode === 'cli' && btn.innerText.includes('CLI'))));
+  
+  const visual = document.getElementById(panel + '-visual');
+  const json = document.getElementById(panel + '-result');
+  const empty = document.getElementById(panel + '-empty');
+
+  if (empty.style.display !== 'none') return; // Nothing to show yet
+
+  if (mode === 'visual') {
+    visual.style.display = 'block';
+    json.style.display = 'none';
+  } else {
+    visual.style.display = 'none';
+    json.style.display = 'block';
+  }
+}
+
+function renderArticleList(panel, items) {
+  const container = document.getElementById(panel + '-visual');
+  if (!items || items.length === 0) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">暂无数据</div>';
+    return;
+  }
+  container.innerHTML = items.map(item => `
+    <div class="result-item">
+      <div class="item-title">${item.title || '无标题'}</div>
+      <div class="item-meta">
+        <span>📰 ${item.platform || '未知来源'}</span>
+        <span>⏰ ${item.published || '未知时间'}</span>
+        ${item.country ? `<span>🌍 ${item.country}</span>` : ''}
+        ${item.media_group ? `<span>📁 ${item.media_group}</span>` : ''}
+      </div>
+      ${item.summary ? `<p style="margin-top:10px;font-size:13px;color:var(--text-secondary);line-height:1.6">${item.summary}</p>` : ''}
+      ${item.url ? `<a href="${item.url}" target="_blank" style="display:inline-block;margin-top:10px;font-size:12px;color:var(--accent-blue);text-decoration:none;">查看原文 →</a>` : ''}
+    </div>
+  `).join('');
+}
+
+function copyText(id) {
+  const el = document.getElementById(id);
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    const btn = el.parentElement.querySelector('.cli-copy');
+    btn.textContent = '✅';
+    setTimeout(() => btn.textContent = '📋', 1500);
+  });
+}
+
+function syntaxHighlight(json) {
+  if (typeof json !== 'string') json = JSON.stringify(json, null, 2);
+  json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, m => {
+    let cls = 'number';
+    if (/^"/.test(m)) { cls = /:$/.test(m) ? 'key' : 'string'; }
+    else if (/true|false/.test(m)) cls = 'boolean';
+    else if (/null/.test(m)) cls = 'null';
+    return '<span class="' + cls + '">' + m + '</span>';
+  });
+}
+
+async function apiCall(url, options = {}) {
+  const t0 = performance.now();
+  try {
+    const resp = await fetch(url, options);
+    const data = await resp.json();
+    const elapsed = Math.round(performance.now() - t0);
+    return { ok: resp.ok, data, elapsed, status: resp.status };
+  } catch (e) {
+    const elapsed = Math.round(performance.now() - t0);
+    return { ok: false, data: { error: e.message }, elapsed, status: 0 };
+  }
+}
+
+function showMeta(id, result) {
+  const el = document.getElementById(id);
+  const count = result.data.count ?? result.data.events?.length ?? '—';
+  el.innerHTML = `
+    <span class="badge ${result.ok ? 'badge-ok' : 'badge-err'}">${result.ok ? '200 OK' : result.status + ' ERR'}</span>
+    <span class="badge badge-time">⏱ ${result.elapsed}ms</span>
+    <span style="color:var(--text-secondary)">${count} 条结果</span>
+  `;
+}
+
+function showJSON(emptyId, resultId, data) {
+  document.getElementById(emptyId).style.display = 'none';
+  const el = document.getElementById(resultId);
+  el.style.display = 'block';
+  el.innerHTML = syntaxHighlight(data);
+}
+
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (loading) {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.innerHTML = '<span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> 请求中...';
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.innerHTML = '▶ 执行';
+  }
+}
+
+// ═══════════════════════════════════════════════
+// API Calls
+// ═══════════════════════════════════════════════
+
+// ── Load External Engines ──
+let externalEngines = [];
+async function loadExternalEngines() {
+  try {
+    const r = await apiCall('/api/v2/external-engines');
+    externalEngines = r.data.engines || [];
+    renderEngineCheckboxs();
+  } catch (e) {
+    console.error('Failed to load external engines:', e);
+    // Fallback: show default engines
+    externalEngines = [
+      {name: 'Google News', has_key: true},
+      {name: 'Bing News', has_key: true},
+      {name: 'NewsAPI', has_key: true},
+      {name: 'Tavily', has_key: true}
+    ];
+    renderEngineCheckboxs();
+  }
+}
+
+function renderEngineCheckboxs() {
+  const container = document.getElementById('external-engines-list');
+  if (!container) return;
+
+  const searchEngines = externalEngines.filter(e =>
+    e.type === 'search_engine' || e.type === 'news_aggregator' || e.type === 'ai_search_engine'
+  );
+
+  container.innerHTML = searchEngines.map(e => {
+    const engineId = e.name.toLowerCase().replace(/ /g, '_');
+    const disabled = !e.has_key;
+    const checked = e.has_key && e.enabled ? 'checked' : '';
+    const statusText = e.has_key ? '✓' : '无密钥';
+
+    return `
+      <label class="engine-checkbox ${disabled ? 'disabled' : ''}" title="${e.description || ''}">
+        <input type="checkbox" id="engine-${engineId}" ${checked} ${disabled ? 'disabled' : ''}>
+        <span class="engine-name">${e.name}</span>
+        <span class="engine-status">${statusText}</span>
+      </label>
+    `;
+  }).join('');
+}
+
+function getSelectedEngines() {
+  const checkboxes = document.querySelectorAll('#external-engines-list input[type="checkbox"]:checked');
+  return Array.from(checkboxes).map(cb => cb.id.replace('engine-', '').replace(/_/g, '_'));
+}
+
+// ── Feed ──
+async function execFeed() {
+  const hours = document.getElementById('feed-hours').value || 6;
+  const limit = document.getElementById('feed-limit').value || 200;
+  document.getElementById('feed-cli-cmd').textContent = `python scripts/api_cli.py feed --hours ${hours} --limit ${limit}`;
+  setLoading('feed-btn', true);
+  const r = await apiCall(`/api/v2/feed?hours=${hours}&limit=${limit}`);
+  setLoading('feed-btn', false);
+  showMeta('feed-meta', r);
+  showJSON('feed-empty', 'feed-result', r.data);
+  renderArticleList('feed', r.data.items);
+  // Default to visual if not in CLI mode
+  setViewMode('feed', document.querySelector('#panel-feed .view-toggle button.active').innerText.includes('页面') ? 'visual' : 'cli');
+}
+
+// ── Search ──
+async function execSearch() {
+  const keyword = document.getElementById('search-keyword').value;
+  const hours = document.getElementById('search-hours').value || 6;
+  const country = document.getElementById('search-country').value;
+  const limit = document.getElementById('search-limit').value || 50;
+  if (!keyword) { alert('请输入关键字'); return; }
+
+  // 获取选中的外部引擎
+  const selectedEngines = getSelectedEngines();
+
+  let cli = `python scripts/api_cli.py search --keyword "${keyword}" --hours ${hours}`;
+  if (country) cli += ` --country "${country}"`;
+  if (selectedEngines.length > 0) cli += ` --external "${selectedEngines.join(',')}"`;
+  document.getElementById('search-cli-cmd').textContent = cli;
+
+  setLoading('search-btn', true);
+
+  // 使用统一搜索API
+  let url = `/api/v2/search/unified?keyword=${encodeURIComponent(keyword)}&hours=${hours}&limit=${limit}`;
+  if (country) url += `&country=${encodeURIComponent(country)}`;
+  if (selectedEngines.length > 0) url += `&sources=${selectedEngines.join(',')}`;
+
+  const r = await apiCall(url);
+  setLoading('search-btn', false);
+  showMeta('search-meta', r);
+
+  // 渲染统一搜索结果（分主媒体和Web补充）
+  renderUnifiedSearchResults(r.data);
+
+  setViewMode('search', document.querySelector('#panel-search .view-toggle button.active').innerText.includes('页面') ? 'visual' : 'cli');
+}
+
+// ── Render Unified Search Results ──
+function renderUnifiedSearchResults(data) {
+  showJSON('search-empty', 'search-result', data);
+
+  const container = document.getElementById('search-visual');
+  if (!data) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">无数据</div>';
+    return;
+  }
+
+  const mainMedia = data.main_media?.items || [];
+  const webSupplement = data.web_supplement?.items || [];
+  const total = mainMedia.length + webSupplement.length;
+
+  if (total === 0) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">未找到相关结果</div>';
+    return;
+  }
+
+  // 混合显示，按时间排序
+  let html = '';
+
+  // 主媒体部分
+  if (mainMedia.length > 0) {
+    html += `<div class="result-section">
+      <div class="section-header" style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px;">
+        <span class="source-badge main-media">🏛️ 主媒体</span>
+        <span style="font-size:12px; color:var(--text-secondary)">${mainMedia.length} 条本地数据库结果</span>
+      </div>
+      <div class="result-list-inner">
+        ${mainMedia.map(item => renderResultItem(item, 'main_media')).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Web补充部分
+  if (webSupplement.length > 0) {
+    html += `<div class="result-section">
+      <div class="section-header" style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px;">
+        <span class="source-badge web-supplement">🌐 Web补充</span>
+        <span style="font-size:12px; color:var(--text-secondary)">${webSupplement.length} 条外部引擎结果</span>
+      </div>
+      <div class="result-list-inner">
+        ${webSupplement.map(item => renderResultItem(item, 'web_supplement')).join('')}
+      </div>
+    </div>`;
+  }
+
+  container.innerHTML = html;
+  container.style.display = 'block';
+}
+
+function renderResultItem(item, category) {
+  const badgeClass = category === 'main_media' ? 'main-media' : 'web-supplement';
+  const badgeIcon = category === 'main_media' ? '🏛️' : '🌐';
+  const engineTag = item.engine ? `<span style="font-size:11px; padding:2px 6px; background:rgba(163,113,247,0.1); color:var(--accent-purple); border-radius:8px; margin-left:6px;">${item.engine}</span>` : '';
+
+  return `
+    <div class="result-item">
+      <div class="item-title">
+        ${item.title || '无标题'}
+        ${engineTag}
+      </div>
+      <div class="item-meta">
+        <span class="source-badge ${badgeClass}">${badgeIcon} ${category === 'main_media' ? '主媒体' : 'Web补充'}</span>
+        <span>📰 ${item.platform || item.source_type || '未知来源'}</span>
+        <span>⏰ ${item.published ? item.published.slice(0, 16) : '未知时间'}</span>
+        ${item.country ? `<span>🌍 ${item.country}</span>` : ''}
+      </div>
+      ${item.summary ? `<p style="margin-top:10px;font-size:13px;color:var(--text-secondary);line-height:1.6">${item.summary.slice(0, 200)}${item.summary.length > 200 ? '...' : ''}</p>` : ''}
+      ${item.url ? `<a href="${item.url}" target="_blank" style="display:inline-block;margin-top:10px;font-size:12px;color:var(--accent-blue);text-decoration:none;">查看原文 →</a>` : ''}
+    </div>
+  `;
+}
+
+// ── Hotspot ──
+async function execHotspot() {
+  const hours = document.getElementById('hotspot-hours').value || 24;
+  const max = document.getElementById('hotspot-max').value || 10;
+  const keyword = document.getElementById('hotspot-keyword').value;
+  
+  let cli = `python scripts/api_cli.py hotspot --hours ${hours} --max ${max}`;
+  if (keyword) cli += ` --keyword "${keyword}"`;
+  document.getElementById('hotspot-cli-cmd').textContent = cli;
+  
+  setLoading('hotspot-btn', true);
+  let url = `/api/v2/hotspot?hours=${hours}&max=${max}`;
+  if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+  const r = await apiCall(url);
+  setLoading('hotspot-btn', false);
+  showMeta('hotspot-meta', r);
+
+  // Both rendering
+  showJSON('hotspot-empty', 'hotspot-result', r.data);
+  const visual = document.getElementById('hotspot-visual');
+  
+  if (r.ok && r.data.events) {
+    visual.innerHTML = r.data.events.map(ev => `
+      <div class="hotspot-card">
+        <div class="hotspot-header">
+          <span class="hotspot-rank">#${ev.rank}</span>
+          <div>
+            <div class="hotspot-title">${ev.title}</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+              ${ev.media_count} 家媒体 · ${ev.article_count} 篇报道
+              ${ev.is_china_related ? ' · 🇨🇳 中国相关' : ''}
+            </div>
+          </div>
+          <span class="hotspot-score">🔥 ${ev.score}</span>
+        </div>
+        <div class="hotspot-tags">
+          ${(ev.platforms || []).map(p => `<span class="tag">${p}</span>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  } else {
+    visual.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">无热点数据</div>';
+  }
+  setViewMode('hotspot', document.querySelector('#panel-hotspot .view-toggle button.active').innerText.includes('页面') ? 'visual' : 'cli');
+}
+
+// ── Research ──
+async function execResearch() {
+  const keyword = document.getElementById('research-keyword').value;
+  const hours = document.getElementById('research-hours').value || 72;
+  const ids = document.getElementById('research-ids').value;
+
+  const mode = document.getElementById('research-mode').value;
+  let body = { mode: mode };
+  
+  if (ids) {
+    body.article_ids = ids.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x));
+    document.getElementById('research-cli-cmd').textContent = `python scripts/api_cli.py research --article-ids ${ids} --mode ${mode}`;
+  } else if (keyword) {
+    body.keyword = keyword;
+    body.hours = parseInt(hours);
+    document.getElementById('research-cli-cmd').textContent = `python scripts/api_cli.py research --keyword "${keyword}" --hours ${hours} --mode ${mode}`;
+  } else {
+    alert('请输入关键字或文章 ID');
+    return;
+  }
+
+  setLoading('research-btn', true);
+  const r = await apiCall('/api/v2/research', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  setLoading('research-btn', false);
+  showMeta('research-meta', r);
+  showJSON('research-empty', 'research-result', r.data);
+  
+  if (r.ok && r.data.timeline) {
+     const visual = document.getElementById('research-visual');
+     const tl = r.data.timeline;
+     visual.innerHTML = `
+        <div style="padding:20px; border-bottom:1px solid var(--border); margin-bottom:15px">
+          <h2 style="font-size:18px; color:var(--accent-cyan); margin-bottom:10px">${tl.title || '研究报告'}</h2>
+          <p style="font-size:14px; line-height:1.6; color:var(--text-secondary)">${tl.summary || ''}</p>
+        </div>
+        <div style="padding:15px">
+          <h4 style="font-size:14px; margin-bottom:12px; color:var(--accent-blue)">📅 事件时间线</h4>
+          ${(tl.events || []).map(ev => `
+            <div style="display:flex; gap:15px; margin-bottom:16px; position:relative; padding-left:15px; border-left:2px solid var(--border)">
+              <div style="font-family:'JetBrains Mono'; font-size:12px; color:var(--accent-blue); min-width:80px">${ev.event_time || ''}</div>
+              <div style="flex:1">
+                <div style="font-weight:600; font-size:14px; margin-bottom:4px">${ev.title || ''}</div>
+                <div style="font-size:13px; color:var(--text-secondary)">${ev.description || ''}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        ${r.data.timeline?.source_articles?.length ? `
+        <div style="padding:15px; border-top:1px solid var(--border); background:rgba(0,0,0,0.1)">
+          <h4 style="font-size:14px; margin-bottom:12px; color:var(--accent-green)">🔗 溯源文章 (${r.data.timeline.source_articles.length})</h4>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+            ${r.data.timeline.source_articles.map(a => `
+              <div style="font-size:11px; padding:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:4px">
+                <div style="font-weight:600; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${a.title}</div>
+                <div style="display:flex; justify-content:space-between; color:var(--text-muted)">
+                   <span>${a.platform}</span>
+                   <a href="${a.url}" target="_blank" style="color:var(--accent-blue)">原文 →</a>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        ` : ''}
+     `;
+  }
+  setViewMode('research', document.querySelector('#panel-research .view-toggle button.active').innerText.includes('页面') ? 'visual' : 'cli');
+}
+
+// ── Value ──
+async function execValue() {
+  const id = document.getElementById('value-id').value;
+  const ids = document.getElementById('value-ids').value;
+
+  let body = {};
+  if (id) {
+    body.article_id = parseInt(id);
+    document.getElementById('value-cli-cmd').textContent = `python scripts/api_cli.py value --article-id ${id}`;
+  } else if (ids) {
+    body.article_ids = ids.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x));
+    document.getElementById('value-cli-cmd').textContent = `python scripts/api_cli.py value --article-ids ${ids}`;
+  } else {
+    alert('请输入文章 ID');
+    return;
+  }
+
+  setLoading('value-btn', true);
+  const r = await apiCall('/api/v2/value', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  setLoading('value-btn', false);
+  showMeta('value-meta', r);
+
+  showJSON('value-empty', 'value-result', r.data);
+  const visual = document.getElementById('value-visual');
+
+  if (r.ok && r.data.assessments) {
+    const colors = { news_value: '#4f8eff', research_value: '#a371f7', publication_value: '#3fb950', policy_value: '#d29922' };
+    const labels = { news_value: '新闻价值', research_value: '研究价值', publication_value: '发表价值', policy_value: '政策价值' };
+    visual.innerHTML = r.data.assessments.map(a => `
+      <div class="result-item">
+        <div class="item-title">${a.article?.title || '—'}</div>
+        <div class="item-meta">
+          <span>📰 ${a.article?.platform || '—'}</span>
+          <span>⏰ ${a.article?.published?.slice(0,16) || '—'}</span>
+          <span style="font-weight:700;color:var(--accent-orange)">综合: ${a.scores?.overall ?? '—'}/10</span>
+        </div>
+        <div class="score-bar-group">
+          ${Object.entries(a.scores || {}).filter(([k]) => k !== 'overall').map(([k, v]) => `
+            <div class="score-bar">
+              <span class="label">${labels[k] || k}</span>
+              <div class="bar"><div class="bar-fill" style="width:${v*10}%;background:${colors[k] || '#4f8eff'}"></div></div>
+              <span class="value" style="color:${colors[k] || '#4f8eff'}">${v}</span>
+            </div>
+          `).join('')}
+        </div>
+        ${a.assessment ? `<p style="margin-top:12px;font-size:13px;color:var(--text-secondary);line-height:1.6">${a.assessment}</p>` : ''}
+        ${a.recommended_outlets?.length ? `<div style="margin-top:8px;font-size:12px;color:var(--accent-cyan)">📝 推荐刊物: ${a.recommended_outlets.join('、')}</div>` : ''}
+        ${a.research_angles?.length ? `<div style="margin-top:4px;font-size:12px;color:var(--accent-purple)">🔬 研究角度: ${a.research_angles.join('、')}</div>` : ''}
+      </div>
+    `).join('');
+  } else {
+    visual.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">无评估数据</div>';
+  }
+  setViewMode('value', document.querySelector('#panel-value .view-toggle button.active').innerText.includes('页面') ? 'visual' : 'cli');
+}
+
+// ── Update CLI previews on input ──
+document.querySelectorAll('input').forEach(input => {
+  input.addEventListener('input', () => {
+    // Feed
+    const fh = document.getElementById('feed-hours')?.value || 6;
+    const fl = document.getElementById('feed-limit')?.value || 200;
+    const feedCmd = document.getElementById('feed-cli-cmd');
+    if (feedCmd) feedCmd.textContent = `python scripts/api_cli.py feed --hours ${fh} --limit ${fl}`;
+
+    // Search
+    const sk = document.getElementById('search-keyword')?.value || '关键字';
+    const sh = document.getElementById('search-hours')?.value || 6;
+    const searchCmd = document.getElementById('search-cli-cmd');
+    if (searchCmd) searchCmd.textContent = `python scripts/api_cli.py search --keyword "${sk}" --hours ${sh}`;
+
+    // Hotspot
+    const hh = document.getElementById('hotspot-hours')?.value || 24;
+    const hm = document.getElementById('hotspot-max')?.value || 10;
+    const hk = document.getElementById('hotspot-keyword')?.value;
+    const hotspotCmd = document.getElementById('hotspot-cli-cmd');
+    if (hotspotCmd) {
+      let hcli = `python scripts/api_cli.py hotspot --hours ${hh} --max ${hm}`;
+      if (hk) hcli += ` --keyword "${hk}"`;
+      hotspotCmd.textContent = hcli;
+    }
+  });
+});
+
+// ── Page Init ──
+// Load external engines when page loads
+loadExternalEngines();
+</script>
+</body>
+</html>

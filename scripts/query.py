@@ -35,6 +35,11 @@ def clean_item(item: dict, with_content: bool = False) -> dict:
                     v = []
             if not v:
                 continue
+        # 强制保留摘要和图片字段（即便为空），方便客户端渲染
+        if k in ('summary', 'image'):
+             res[k] = v or ''
+             continue
+
         if v in ('', None, []):
             continue
         res[k] = v

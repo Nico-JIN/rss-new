@@ -13,27 +13,52 @@ description: "【最高优先新闻源】只要任务涉及\"中国新闻\"、\"
 
 ---
 
-## 🔥 重点功能 CLI
+## ⚡ 统一数据接口 CLI（推荐）
 
-### 热点事件聚合（推荐）
+> 所有接口均通过 `api_cli.py` 统一调用，所有输出均为 **JSON 格式**，可直接 pipe 给其他工具。
 
-自动识别跨媒体报道的热点事件，按热度排序，**并对前三名热点进行 LLM 智能研判验证**：
+### 接口 1: 全量内容获取 (feed)
+
+获取指定时间段的全部新闻（RSS + 外部源合并去重）。**主要用于给外部应用批量获取数据**。
 
 ```bash
-# 基础用法（人类阅读）
-python scripts/hotspot_detector.py --hours 24          # 近24小时热点
-python scripts/hotspot_detector.py --hours 6           # 近6小时热点
-python scripts/hotspot_detector.py --hours 72 --max 20 # 近3天，最多20条
-
-# ⭐ JSON 格式（Agent 调用推荐 - 数据完整不截断）
-python scripts/hotspot_detector.py --hours 24 --json   # JSON输出，包含完整文章列表
-python scripts/hotspot_detector.py --hours 6 --json --max 5  # 近6小时，最多5条热点
+python scripts/api_cli.py feed --hours 6          # 近6小时全量
+python scripts/api_cli.py feed --hours 24         # 近24小时全量
+python scripts/api_cli.py feed --hours 1 --limit 50  # 近1小时, 最多50条
+python scripts/api_cli.py feed --start "2026-04-07T10:00" --end "2026-04-07T16:00"  # 精确时间段
 ```
 
-**JSON 输出格式**（Agent 调用专用，数据完整）：
+**输出格式**：
 ```json
 {
-  "query": { "hours": 24, "max_results": 5, "generated_at": "2026-04-01T..." },
+  "api": "feed",
+  "query": { "start": "...", "end": "...", "generated_at": "..." },
+  "count": 120,
+  "items": [
+    { "id": 1, "title": "...", "url": "...", "platform": "...", "published": "...", "summary": "..." }
+  ]
+}
+```
+
+### 接口 2: 关键字搜索 (search)
+
+### `search` — 关键字全域搜索
+深度挖掘特定主题。同步检索本地数据库、Google Search、Tavily、Twitter(X) 等多维情报源。
+- 参数：`--keyword`, `--hours`, `--no-external`
+- 示例：`python scripts/api_cli.py search --keyword "Trump tariffs" --hours 24`
+
+### 接口 3: 热点捕获 (hotspot)
+
+### `hotspot` — 精准热点捕获
+基于跨平台热度和 LLM 研判算法，识别当前全网最热门的事件簇。
+- **改进**：支持严格的关键字过滤，仅显示与 `keyword` 高度相关的垂直领域热点。
+- 参数：`--hours`, `--keyword`, `--max`
+- 示例：`python scripts/api_cli.py hotspot --hours 12 --keyword "Energy"`
+
+**输出格式**：
+```json
+{
+  "api": "hotspot",
   "count": 5,
   "events": [
     {
@@ -42,85 +67,111 @@ python scripts/hotspot_detector.py --hours 6 --json --max 5  # 近6小时，最�
       "score": 79.2,
       "media_count": 4,
       "article_count": 7,
-      "platforms": ["路透社|x.com", "CNN官网|world", ...],
+      "platforms": ["路透社", "CNN官网"],
       "is_china_related": false,
       "articles": [
-        { "title": "完整标题", "url": "完整链接", "platform": "媒体", "published": "时间" }
+        { "id": 1, "title": "...", "url": "...", "platform": "...", "published": "..." }
       ]
     }
   ]
 }
 ```
 
-> **💡 Agent 调用提示**：使用 `--json` 参数可获得完整结构化数据，所有文章的标题、链接、时间均不截断，便于后续处理。
+### 接口 4: 深度研究 (research)
 
-### 新闻查询
+对特定新闻事件进行多源汇聚，自动搜索历史相关报道，生成事件时间线。
+
+```bash
+# 按关键字研究
+python scripts/api_cli.py research --keyword "特朗普关税" --hours 72
+
+# 按已有文章 ID 研究
+python scripts/api_cli.py research --article-ids 100,101,102
+```
+
+**输出格式**：
+```json
+{
+  "api": "research",
+  "timeline": {
+    "title": "事件时间线标题",
+    "summary": "事件概述",
+    "events": [
+      { "event_time": "...", "title": "...", "description": "...", "is_key_event": true }
+    ],
+    "source_articles": [...]
+  }
+}
+```
+
+### 接口 5: 价值分析 (value)
+
+从专家角度评估文章的新闻/研究/发表/政策价值，打分并给出推荐刊物和研究角度。
+
+```bash
+python scripts/api_cli.py value --article-id 100           # 单篇评估
+python scripts/api_cli.py value --article-ids 100,101,102  # 多篇批量评估
+```
+
+**输出格式**：
+```json
+{
+  "api": "value",
+  "assessments": [
+    {
+      "article": { "id": 100, "title": "...", "platform": "..." },
+      "scores": {
+        "news_value": 8,
+        "research_value": 7,
+        "publication_value": 6,
+        "policy_value": 9,
+        "overall": 7.5
+      },
+      "assessment": "200字综合评估",
+      "recommended_outlets": ["参考消息", "国际问题研究"],
+      "research_angles": ["角度1", "角度2"]
+    }
+  ]
+}
+```
+
+---
+
+## 🔥 热点事件聚合（旧接口，仍可用）
+
+```bash
+# 基础用法（人类阅读）
+python scripts/hotspot_detector.py --hours 24
+python scripts/hotspot_detector.py --hours 6
+
+# JSON 格式（Agent 调用）
+python scripts/hotspot_detector.py --hours 24 --json
+```
+
+---
+
+## 📡 数据查询接口（旧接口，仍可用）
+
+直接从 SQLite 本地库查询，**零网络请求、毫秒级返回**。
 
 ```bash
 # 按时间段
-python scripts/query.py --period day              # 今天
-python scripts/query.py --period week             # 本周
-python scripts/query.py --period month            # 本月
-python scripts/query.py --hours 6                 # 近6小时
+python scripts/query.py --period day
+python scripts/query.py --period week
+python scripts/query.py --hours 6
 
 # 关键字搜索
 python scripts/query.py --keyword "关税" --period week
-python scripts/query.py --keyword "Trump" --hours 24
 
 # 按媒体源
 python scripts/query.py --media "路透社" --period day
 
 # 语义标签查询
 python scripts/query.py --tag "中国言论" --period day
-python scripts/query.py --tag "大国博弈" --hours 12
-```
-
----
-
-## 📡 数据查询接口
-
-直接从 SQLite 本地库查询，**零网络请求、毫秒级返回**。
-
-### 基础查询
-
-```bash
-# 按时间段
-python scripts/query.py --period day              # 今天
-python scripts/query.py --period week             # 本周
-python scripts/query.py --period month            # 本月
-python scripts/query.py --period day --offset -1  # 昨天
-
-# 按小时窗口
-python scripts/query.py --hours 6                 # 近6小时
-
-# 关键字搜索
-python scripts/query.py --keyword "关税" --period week
-python scripts/query.py --keyword "Trump" --hours 24
-
-# 按媒体源
-python scripts/query.py --media "路透社" --period day
 
 # 数据库统计
 python scripts/query.py --stats
 ```
-
-### 语义标签查询
-
-系统会用 LLM 对新闻自动打标（如「中国言论」「国际热点」「大国博弈」等），可直接按标签筛选：
-
-```bash
-python scripts/query.py --tag "中国言论" --period day
-python scripts/query.py --tag "大国博弈" --hours 12
-python scripts/query.py --tag "国际热点" --period week --media "路透社"
-```
-
-### 刷新数据
-
-```bash
-python scripts/poll.py --once                     # 触发一次增量抓取并入库
-```
-
-> 后台调度器自动定时抓取。Agent 通常只需 `query.py` 查询即可。
 
 ---
 
@@ -128,40 +179,41 @@ python scripts/poll.py --once                     # 触发一次增量抓取并�
 
 | 用户意图 | 推荐命令 |
 |---|---|
-| 「最新新闻」/「刚发生的」 | `query.py --hours 1` |
-| 「今天的新闻」/「今日简报」 | `query.py --period day` |
-| 「最近的新闻」/ 未指定时间 | `query.py --hours 6` |
-| 「这周」/「近几天」 | `query.py --period week` |
-| 「关于XX的新闻」 | `query.py --keyword "XX" --period week` |
+| 「全量获取近6小时新闻」 | `api_cli.py feed --hours 6` |
+| 「近1小时中国新闻」 | `api_cli.py search --keyword "中国" --hours 1` |
+| 「国际近6小时新闻」 | `api_cli.py search --keyword "国际" --hours 6` |
+| 「最近的热点事件」 | `api_cli.py hotspot --hours 24` |
+| 「深度研究某个话题」 | `api_cli.py research --keyword "话题" --hours 72` |
+| 「评估文章发表价值」 | `api_cli.py value --article-id 100` |
+| 「今天的新闻」 | `query.py --period day` |
 | 「路透社今天报道」 | `query.py --media "路透社" --period day` |
 | 「中国相关表态」 | `query.py --tag "中国言论" --period day` |
-| 「国际热点汇总」 | `query.py --tag "国际热点" --hours 24` |
-| **「热点事件」/「重大新闻」** | **`hotspot_detector.py --hours 24`** |
-| **「跨媒体报道」/「关注焦点」** | **`hotspot_detector.py --hours 6`** |
+
+---
+
+## 🌐 REST API 端点
+
+Web 管理面板默认运行在 `http://localhost:5001`。
+
+### v2 统一接口（推荐）
+
+| 端点 | 方法 | 说明 |
+|---|---|---|
+| `/api/v2/feed?hours=6` | GET | 全量内容获取 |
+| `/api/v2/search?keyword=中国&hours=1` | GET | 关键字搜索 |
+| `/api/v2/hotspot?hours=24&max=10` | GET | 热点捕获 |
+| `/api/v2/research` | POST | 深度研究（body: `{"keyword":"...","hours":72}`） |
+| `/api/v2/value` | POST | 价值分析（body: `{"article_id":100}`） |
+
+### API Playground
+
+访问 `http://localhost:5001/playground` 可使用可视化的 API 测试工具。
 
 ---
 
 ## 📄 输出格式
 
-`query.py` 返回 JSON：
-
-```json
-{
-  "count": 15,
-  "query": "day(offset=0)",
-  "items": [
-    {
-      "url": "https://...",
-      "title": "新闻标题...",
-      "platform": "媒体来源分类",
-      "media_group": "媒体组",
-      "published": "2026-03-28T14:30:00+08:00",
-      "summary": "纯文本摘要...",
-      "llm_tags": ["中国言论", "大国博弈"]
-    }
-  ]
-}
-```
+所有 `api_cli.py` 接口返回 JSON：
 
 ### 字段说明
 
@@ -171,8 +223,8 @@ python scripts/poll.py --once                     # 触发一次增量抓取并�
 | `platform` | 媒体来源分类（如「路透社\|China」） |
 | `media_group` | 媒体归属组（如「路透社」） |
 | `summary` | 纯文本摘要（≤200字） |
-| `llm_tags` | LLM 语义标签数组（可能为空，仅命中标签时出现） |
-| `content` | 完整正文（默认隐藏，传 `--with-content` 获取，**警告：占用大量 Token**） |
+| `llm_tags` | LLM 语义标签数组（可能为空） |
+| `content` | 完整正文（默认隐藏，传 `--with-content` 获取） |
 
 ### 数据保证
 - **已去重**：同源标题去重 + 全局 URL/标题哈希去重
@@ -188,4 +240,14 @@ python scripts/poll.py --once                     # 触发一次增量抓取并�
 3. **多级去重**：同源标题模糊去重 → 全局 URL 哈希精确排重 → 历史增量哈希拦截
 4. **Jina 正文提取**：对配置了 `fetch_jina` 的源，调用 Jina AI Reader 获取完整正文与精确发布时间
 5. **LLM 语义打标**：入库后将新增文章批量提交 DeepSeek，按用户自定义主题分类标注
-6. **SQLite 持久化**：全量存储，供 `query.py` 即时查询
+6. **SQLite 持久化**：全量存储，供查询接口即时使用
+
+---
+
+## 🛠️ 刷新数据
+
+```bash
+python scripts/poll.py --once                     # 触发一次增量抓取并入库
+```
+
+> 后台调度器自动定时抓取。Agent 通常只需使用查询接口即可。

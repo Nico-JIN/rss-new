@@ -84,7 +84,7 @@ def _call_llm_api(messages: list[dict], cfg: dict) -> str | None:
     provider = llm_cfg.get('provider', 'deepseek')
 
     # 定义支持 OpenAI 协议的新模型列表
-    openai_compat_models = ['qwen3.5-plus', 'glm-5', 'glm-4.7', 'kimi-k2.5', 'MiniMax-M2.5']
+    openai_compat_models = ['qwen3.5-plus', 'glm-5', 'glm-4.7', 'kimi-k2.5', 'MiniMax-M2.5', 'ollama']
 
     if provider == 'volcengine':
         return _call_volcengine_ark(messages, llm_cfg)
@@ -172,22 +172,23 @@ def _call_deepseek(messages: list[dict], cfg: dict) -> str | None:
 
 # --- 翻译与语言检测工具 (新增) ---
 
-def is_english_text(text: str) -> bool:
-    """简单启发式检测是否为英文/外语"""
+def is_foreign_text(text: str) -> bool:
+    """启发式检测是否为非中文（外语）"""
     if not text: return False
-    # 去除标点符号和数字
-    clean = re.sub(r'[^\u4e00-\u9fa5a-zA-Z]', '', text)
-    if not clean: return False
     
-    # 计算中文字符和英文字符
-    chinese_chars = len(re.findall(r'[\u4e00-\u9fa5]', clean))
-    alpha_chars = len(re.findall(r'[a-zA-Z]', clean))
+    # 提取所有中文字符
+    chinese_chars = len(re.findall(r'[\u4e00-\u9fa5]', text))
+    # 提取有意义的字符（字母、数字等）
+    clean = re.sub(r'[^\w\u4e00-\u9fa5]', '', text)
+    total_len = len(clean)
     
-    total = chinese_chars + alpha_chars
-    if total == 0: return False
+    if total_len == 0: return False
     
-    # 如果英文字符占比超过 70%，且中文极少，判定为外语
-    return (alpha_chars / total > 0.7) and (chinese_chars < 5)
+    # 如果中文字符占比低于 20%，或者中文字符极少(<5个)，判定为外语
+    return (chinese_chars / total_len < 0.2) or (chinese_chars < 5)
+
+# 兼容旧代码调用
+is_english_text = is_foreign_text
 
 def batch_translate_to_chinese(texts: list[str], cfg: dict) -> dict:
     """

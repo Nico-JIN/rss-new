@@ -31,6 +31,10 @@
                 <span class="nav-icon">🧠</span><span>情报分析</span></a></li>
             <li><a href="#" class="nav-link" data-page="timeline">
                 <span class="nav-icon">📜</span><span>事件时间线</span></a></li>
+            <li><a href="/foreign_media.html" class="nav-link">
+                    <span class="nav-icon">🌐</span><span>外媒舆情</span></a></li>
+            <li><a href="/playground" class="nav-link">
+                <span class="nav-icon">⚡</span><span>API Playground</span></a></li>
             <li><a href="#" class="nav-link" data-page="logs">
                 <span class="nav-icon">⏱️</span><span>抓取日志</span></a></li>
             <li><a href="#" class="nav-link" data-page="database">
@@ -175,13 +179,53 @@
                         <input type="number" id="inputInterval" class="input input-sm" style="width: 60px" value="60" />
                         <button class="btn btn-secondary btn-sm" id="btnSetInterval">保存配置</button>
                     </div>
-                    <button class="btn btn-primary" id="btnAddFeed">
-                        <span>＋</span> 添加源
-                    </button>
                 </div>
             </div>
-            <div id="feedsContainer" class="feeds-container">
-                <!-- Grouped feeds will be injected here -->
+
+            <!-- RSS源分类 -->
+            <div class="source-category" style="margin-bottom: 20px;">
+                <div class="category-header" onclick="toggleSourceCategory('rss')"
+                     style="display: flex; align-items: center; justify-content: space-between; padding: 15px 20px; background: linear-gradient(135deg, rgba(0,243,255,0.1), rgba(0,128,255,0.1)); border: 1px solid rgba(0,243,255,0.3); border-radius: 8px; cursor: pointer; transition: all 0.3s;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 24px;">📡</span>
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">RSS 订阅源</h3>
+                            <span id="rssCount" style="font-size: 12px; color: var(--text-secondary);">加载中...</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <button class="btn btn-primary btn-sm" id="btnAddFeed" onclick="event.stopPropagation(); openFeedModal(-1);">
+                            <span>＋</span> 添加RSS源
+                        </button>
+                        <span id="rssToggleIcon" style="font-size: 20px; transition: transform 0.3s;">▼</span>
+                    </div>
+                </div>
+                <div id="rssFeedsContainer" class="feeds-container" style="padding: 15px 0;">
+                    <!-- RSS feeds will be injected here -->
+                </div>
+            </div>
+
+            <!-- 外部搜索源分类 -->
+            <div class="source-category" style="margin-bottom: 20px;">
+                <div class="category-header" onclick="toggleSourceCategory('external')"
+                     style="display: flex; align-items: center; justify-content: space-between; padding: 15px 20px; background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(168,85,247,0.1)); border: 1px solid rgba(99,102,241,0.3); border-radius: 8px; cursor: pointer; transition: all 0.3s;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 24px;">🌐</span>
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">外部搜索源</h3>
+                            <span id="externalCount" style="font-size: 12px; color: var(--text-secondary);">社交媒体、搜索引擎、AI搜索</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); location.href='/foreign_media.html';">
+                            🔍 外媒搜索
+                        </button>
+                        <span id="externalToggleIcon" style="font-size: 20px; transition: transform 0.3s; transform: rotate(-90deg);">▼</span>
+                    </div>
+                </div>
+                <div id="externalFeedsContainer" style="padding: 15px 0; display: none;">
+                    <!-- External sources will be injected here -->
+                </div>
             </div>
         </section>
 
@@ -213,7 +257,10 @@
                         </select>
                         <input type="number" id="searchHours" class="input" placeholder="近 N 小时" style="flex:0.5">
                         <button class="btn btn-primary" id="btnSearch" style="flex:1">
-                            <span>🔍</span> 搜索相关新闻事件
+                            <span>🔍</span> 搜索本地
+                        </button>
+                        <button class="btn btn-hud-action glow-btn" id="btnDeepResearch" style="flex:1">
+                            <span>🚀</span> AI 深度研究
                         </button>
                     </div>
                 </div>
@@ -537,6 +584,53 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="document.getElementById('contentModal').classList.remove('active')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 外部源编辑模态框 -->
+    <div class="modal-overlay" id="externalSourceModal">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 id="externalSourceModalTitle">编辑外部源</h2>
+                <button class="modal-close" onclick="document.getElementById('externalSourceModal').classList.remove('active')">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="externalSourceName">
+                <div class="form-group">
+                    <label>名称</label>
+                    <input type="text" id="externalSourceNameDisplay" class="input" readonly style="background: rgba(255,255,255,0.05);">
+                </div>
+                <div class="form-group">
+                    <label>类型</label>
+                    <input type="text" id="externalSourceType" class="input" readonly style="background: rgba(255,255,255,0.05);">
+                </div>
+                <div class="form-group">
+                    <label>分类</label>
+                    <input type="text" id="externalSourceCategory" class="input" readonly style="background: rgba(255,255,255,0.05);">
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="externalSourceDesc" class="input" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>API Key 引用</label>
+                    <input type="text" id="externalSourceApiKeyRef" class="input" placeholder="如: twitterapi_key">
+                </div>
+                <div class="form-group">
+                    <label>最大结果数</label>
+                    <input type="number" id="externalSourceMaxResults" class="input" value="20" min="1" max="100">
+                </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="externalSourceEnabled" checked />
+                        启用此源
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('externalSourceModal').classList.remove('active')">取消</button>
+                <button class="btn btn-primary" onclick="saveExternalSource()">保存</button>
             </div>
         </div>
     </div>

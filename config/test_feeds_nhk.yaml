@@ -1,0 +1,5 @@
+feeds:
+  - url: https://www3.nhk.or.jp/nhkworld/zh/news/
+    platform: NHK（日本放送协会）
+    media_group: NHK
+    timeout: 30

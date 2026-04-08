@@ -1,0 +1,5 @@
+feeds:
+  - url: https://www.zaobao.com.sg/rss/realtime/world
+    platform: 联合早报|测试
+    media_group: zaobao
+    timeout: 30
