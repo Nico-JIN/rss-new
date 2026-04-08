@@ -2034,13 +2034,30 @@ def api_v2_search_unified():
     if filter_removed_count > 0:
         print(f"[INFO] 外部引擎时间过滤: 移除 {filter_removed_count} 条超出时间窗口的结果")
 
+    # 收集关键字优化信息
+    keyword_optimization = {}
+    if external_sources:
+        try:
+            sys.path.insert(0, str(SCRIPTS))
+            from search_keyword_optimizer import optimize_search_query
+            for source in external_sources:
+                opt = optimize_search_query(keyword, hours=hours, engine=source, use_llm=False)
+                keyword_optimization[source] = {
+                    'original': opt.get('original_keyword'),
+                    'optimized': opt.get('optimized_keyword'),
+                    'engine_type': opt.get('engine_type')
+                }
+        except Exception as e:
+            print(f"[WARN] 关键字优化信息获取失败: {e}")
+
     return jsonify({
         'api': 'search/unified',
         'query': {
             'keyword': keyword,
             'hours': hours,
             'sources': external_sources,
-            'generated_at': now.isoformat()
+            'generated_at': now.isoformat(),
+            'keyword_optimization': keyword_optimization
         },
         'main_media': {
             'count': len(main_media_results),

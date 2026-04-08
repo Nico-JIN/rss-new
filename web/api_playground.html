@@ -1006,6 +1006,24 @@ function renderUnifiedSearchResults(data) {
   // 混合显示，按时间排序
   let html = '';
 
+  // 关键字优化信息
+  const kwOpt = data.query?.keyword_optimization;
+  if (kwOpt && Object.keys(kwOpt).length > 0) {
+    html += `<div class="result-section" style="margin-bottom:12px;">
+      <div style="padding:12px 16px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px;">
+        <div style="font-size:12px; color:var(--accent-cyan); margin-bottom:8px;">🔧 智能关键字优化</div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">`;
+    for (const [engine, opt] of Object.entries(kwOpt)) {
+      if (opt.original !== opt.optimized) {
+        html += `<div style="font-size:11px; padding:4px 8px; background:rgba(79,142,255,0.1); border-radius:6px;">
+          <span style="color:var(--text-muted)">${engine}:</span>
+          <span style="color:var(--accent-green)">${opt.optimized}</span>
+        </div>`;
+      }
+    }
+    html += `</div></div></div>`;
+  }
+
   // 主媒体部分
   if (mainMedia.length > 0) {
     html += `<div class="result-section">
