@@ -43,8 +43,9 @@ def _retry_on_locked(func, max_retries=5, delay=0.5):
 
 
 def init_db(conn=None):
-    """创建所有表和索引，并处理潜在的数据迁移"""
+    """创建所有表和索引"""
     c = conn or get_conn()
+
     c.executescript("""
         CREATE TABLE IF NOT EXISTS articles (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,23 +187,7 @@ def init_db(conn=None):
         CREATE INDEX IF NOT EXISTS idx_external_articles_keyword ON external_articles(keyword_match);
         CREATE INDEX IF NOT EXISTS idx_external_articles_url_hash ON external_articles(url_hash);
     """)
-    
-    # 动态迁移检测
-    cursor = c.execute("PRAGMA table_info(articles)")
-    columns = [row['name'] for row in cursor.fetchall()]
-    if 'content' not in columns:
-        c.execute("ALTER TABLE articles ADD COLUMN content TEXT DEFAULT ''")
-        c.commit()
-    if 'llm_tags' not in columns:
-        c.execute("ALTER TABLE articles ADD COLUMN llm_tags TEXT DEFAULT '[]'")
-        c.commit()
-    if 'country' not in columns:
-        c.execute("ALTER TABLE articles ADD COLUMN country TEXT DEFAULT ''")
-        c.commit()
-    if 'video' not in columns:
-        c.execute("ALTER TABLE articles ADD COLUMN video TEXT DEFAULT ''")
-        c.commit()
-        
+
     if conn is None:
         c.close()
     return c
@@ -220,7 +205,7 @@ def upsert_articles(items: list[dict], conn=None):
     """
     def _insert():
         c = conn or get_conn()
-        
+
         # 统计入库前的数量
         old_count = c.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
 
@@ -232,22 +217,22 @@ def upsert_articles(items: list[dict], conn=None):
 
         # 使用 UPSERT 语法：冲突时如果旧记录没图，则更新图片
         sql = """
-            INSERT INTO articles 
+            INSERT INTO articles
                 (url_hash, title_hash, url, title, platform, media_group, country, published, summary, content, image, video, llm_tags)
-            VALUES 
+            VALUES
                 (:url_hash, :title_hash, :url, :title, :platform, :media_group, :country, :published, :summary, :content, :image, :video, :llm_tags)
-            ON CONFLICT(url_hash) DO UPDATE SET 
+            ON CONFLICT(url_hash) DO UPDATE SET
                 image = CASE WHEN (image IS NULL OR image = '') THEN excluded.image ELSE image END,
                 video = CASE WHEN (video IS NULL OR video = '') THEN excluded.video ELSE video END
         """
-        
+
         c.executemany(sql, items)
         c.commit()
-        
+
         # 统计入库后的数量
         new_count = c.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         inserted = new_count - old_count
-        
+
         if conn is None:
             c.close()
         return inserted
@@ -286,17 +271,44 @@ def query_by_time(start: str, end: str, media_group=None, platform=None, country
 
 def query_by_keyword(keyword: str, start=None, end=None, media_group=None, platform=None, country=None,
                      limit=100, offset=0, conn=None):
-    """按关键字模糊搜索（title + summary）"""
+    """
+    按关键字模糊搜索（title + summary）
+
+    注意：time_only 的源只按时间过滤，不匹配关键字
+    这些源通常是关注特定地区的源（如联合早报、路透社China等）
+    """
     c = conn or get_conn()
     like = f"%{keyword}%"
-    sql = "SELECT * FROM articles WHERE (title LIKE ? OR summary LIKE ?)"
-    params = [like, like]
-    if start:
-        sql += " AND published >= ?"
-        params.append(start)
-    if end:
-        sql += " AND published <= ?"
-        params.append(end)
+
+    # time_only 的源（只按时间过滤，不匹配关键字）
+    # 这些源名称包含特定关键词
+    time_only_patterns = [
+        '%联合早报%',
+        '%路透社%China%',
+        '%纽约时报%China%',
+        '%CNN%China%',
+        '%南华早报%',
+        '%德国之声%',
+        '%路透社%Japan%',
+        '%共同社%',
+        '%印度时报%',
+        '%加拿大广播%',
+    ]
+
+    # 构建 SQL：time_only 的源只按时间，其他源按时间+关键字
+    time_only_sql = ' OR '.join([f"platform LIKE '{p}'" for p in time_only_patterns])
+
+    sql = f"""SELECT * FROM articles WHERE published >= ? AND published <= ?
+              AND (
+                  ({time_only_sql})
+                  OR title LIKE ?
+                  OR summary LIKE ?
+              )"""
+    params = [start or '1970-01-01', end or '2099-12-31']
+
+    # 关键字参数
+    params.extend([like, like])
+
     if media_group:
         sql += " AND media_group = ?"
         params.append(media_group)
