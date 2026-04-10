@@ -62,6 +62,15 @@ def init_db(conn=None):
             video       TEXT DEFAULT '',
             llm_tags    TEXT DEFAULT '[]',
             country     TEXT DEFAULT '',
+            -- 热点分析新增字段
+            primary_country    TEXT DEFAULT '',
+            event_key          TEXT DEFAULT '',
+            related_countries  TEXT DEFAULT '[]',
+            entities           TEXT DEFAULT '[]',
+            media_tier         TEXT DEFAULT 'B',
+            llm_confidence     REAL DEFAULT 0,
+            analyzed_at        TEXT DEFAULT '',
+            is_political       INTEGER DEFAULT 1,  -- 是否政治情报类新闻（默认True）
             created_at  TEXT DEFAULT (datetime('now', '+8 hours'))
         );
         CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published);
@@ -69,6 +78,7 @@ def init_db(conn=None):
         CREATE INDEX IF NOT EXISTS idx_articles_title ON articles(title);
         CREATE INDEX IF NOT EXISTS idx_articles_url_hash ON articles(url_hash);
         CREATE INDEX IF NOT EXISTS idx_articles_country ON articles(country);
+        CREATE INDEX IF NOT EXISTS idx_articles_is_political ON articles(is_political);
 
 
         CREATE TABLE IF NOT EXISTS fetch_logs (
@@ -204,9 +214,40 @@ def init_db(conn=None):
         CREATE INDEX IF NOT EXISTS idx_scheduled_hotspots_executed ON scheduled_hotspots(executed_at);
     """)
 
+    # 迁移：为现有表添加新字段
+    _migrate_hotspot_fields(c)
+
     if conn is None:
         c.close()
     return c
+
+
+def _migrate_hotspot_fields(conn):
+    """迁移函数：为 articles 表添加热点分析字段"""
+    new_columns = [
+        ("primary_country", "TEXT DEFAULT ''"),
+        ("event_key", "TEXT DEFAULT ''"),
+        ("related_countries", "TEXT DEFAULT '[]'"),
+        ("entities", "TEXT DEFAULT '[]'"),
+        ("media_tier", "TEXT DEFAULT 'B'"),
+        ("llm_confidence", "REAL DEFAULT 0"),
+        ("analyzed_at", "TEXT DEFAULT ''"),
+    ]
+
+    for col_name, col_def in new_columns:
+        try:
+            conn.execute(f"ALTER TABLE articles ADD COLUMN {col_name} {col_def}")
+        except sqlite3.OperationalError:
+            pass  # 字段已存在，忽略
+
+    # 添加索引
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_event_key ON articles(event_key)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_primary_country ON articles(primary_country)")
+    except sqlite3.OperationalError:
+        pass
+
+    conn.commit()
 
 
 # ── 文章操作 ──────────────────────────────────────────────
