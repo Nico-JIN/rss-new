@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>热点检测 - RSS Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* 🎨 热点检测页面专用样式 - Premium Design 🎨 */
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --shadow-subtle: 0 4px 20px rgba(0, 0, 0, 0.2);
+            --shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.4);
+            --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        body {
+            background-color: var(--bg-primary, #0f172a);
+            color: var(--text-primary, #f8fafc);
+        }
+
+        .hotspot-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            animation: fadeInDown 0.6s ease-out;
+        }
+
+        .hotspot-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hotspot-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .hotspot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .category-panel {
+            background: var(--card-bg, #1e293b);
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+            overflow: hidden;
+            box-shadow: var(--shadow-subtle);
+            transition: var(--transition-smooth);
+            display: flex;
+            flex-direction: column;
+            animation: fadeInUp 0.6s ease-out backwards;
+        }
+
+        .category-panel:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .category-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .category-header::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+            pointer-events: none;
+        }
+
+        .category-header.disabled {
+            background: linear-gradient(135deg, #475569 0%, #334155 100%) !important;
+            opacity: 0.8;
+        }
+
+        .category-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 1;
+        }
+
+        .category-title h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .category-actions {
+            display: flex;
+            gap: 8px;
+            z-index: 1;
+        }
+
+        .category-actions button {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: var(--transition-smooth);
+            backdrop-filter: blur(4px);
+        }
+
+        .category-actions button:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.05);
+        }
+
+        .category-meta {
+            display: flex;
+            gap: 16px;
+            padding: 12px 24px;
+            background: rgba(0,0,0,0.15);
+            font-size: 13px;
+            color: var(--text-secondary, #94a3b8);
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .category-meta span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+        }
+
+        .hotspot-list {
+            max-height: 520px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.2) transparent;
+        }
+        
+        .hotspot-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .hotspot-list::-webkit-scrollbar-thumb {
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+
+        .hotspot-item {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--glass-border);
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            background: transparent;
+        }
+
+        .hotspot-item:hover {
+            background: rgba(255,255,255,0.03);
+            padding-left: 28px;
+            padding-right: 20px;
+        }
+
+        .hotspot-item:last-child {
+            border-bottom: none;
+        }
+
+        .hotspot-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .hotspot-score {
+            background: rgba(139, 92, 246, 0.2);
+            color: #c4b5fd;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .hotspot-score::before {
+            content: '🔥';
+            font-size: 12px;
+        }
+
+        .hotspot-title {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-primary, #f1f5f9);
+            line-height: 1.5;
+            flex: 1;
+            margin-right: 16px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            transition: color 0.2s;
+        }
+
+        .hotspot-item:hover .hotspot-title {
+            color: #38bdf8;
+        }
+
+        .hotspot-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 13px;
+            color: var(--text-secondary, #94a3b8);
+            margin-bottom: 12px;
+        }
+
+        .hotspot-meta span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .hotspot-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .hotspot-tag {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--text-secondary, #cbd5e1);
+            transition: background 0.2s;
+        }
+        .hotspot-item:hover .hotspot-tag {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .hotspot-empty {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .hotspot-empty-icon {
+            font-size: 56px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        /* 配置弹窗 */
+        .config-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .config-modal.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .config-modal-content {
+            background: var(--card-bg, #1e293b);
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            transform: scale(0.95);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+
+        .config-modal.active .config-modal-content {
+            transform: scale(1);
+        }
+
+        .config-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .config-modal-header h3 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .config-modal-body {
+            padding: 24px;
+        }
+
+        .config-field {
+            margin-bottom: 20px;
+        }
+
+        .config-field label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .config-field input,
+        .config-field select,
+        .config-field textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.2);
+            color: white;
+            font-size: 14px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        
+        .config-field input:focus,
+        .config-field select:focus,
+        .config-field textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .config-field textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .config-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 20px 24px;
+            border-top: 1px solid var(--glass-border);
+            background: rgba(0,0,0,0.1);
+        }
+
+        /* 刷新动画 */
+        .refreshing .category-header .category-title span {
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 时间窗口选择器 */
+        .time-window-selector {
+            display: flex;
+            gap: 8px;
+        }
+
+        .time-window-selector select {
+            padding: 10px 16px;
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            background: var(--card-bg, #1e293b);
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+        .time-window-selector select:hover {
+            border-color: rgba(255,255,255,0.2);
+        }
+        
+        /* 按钮通用提升 */
+        .btn {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: var(--transition-smooth);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+        }
+        .btn-secondary {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+        }
+
+        /* 事件详情弹窗中的文章列表样式 */
+        .event-articles-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .event-article-item {
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+        .event-article-item:hover {
+            background: rgba(255,255,255,0.06);
+            border-color: rgba(255,255,255,0.15);
+        }
+        .ea-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+        .event-article-item:hover .ea-title {
+            color: #38bdf8;
+        }
+        .ea-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 12px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="logo">
+            <span class="logo-icon">📡</span>
+            <span class="logo-text">RSS Hub</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link">
+                <span class="nav-icon">📊</span><span>仪表盘</span></a></li>
+            <li><a href="/hotspot.html" class="nav-link active">
+                <span class="nav-icon">🔥</span><span>热点检测</span></a></li>
+            <li><a href="/foreign_media.html" class="nav-link">
+                <span class="nav-icon">🌐</span><span>外媒舆情</span></a></li>
+            <li><a href="/playground" class="nav-link">
+                <span class="nav-icon">⚡</span><span>API Playground</span></a></li>
+        </ul>
+    </nav>
+
+    <main class="content">
+        <div class="hotspot-header">
+            <div>
+                <h1>🔥 定时热点检测</h1>
+                <p style="color: var(--text-secondary); margin-top: 4px;">5类新闻热点实时监控</p>
+            </div>
+            <div class="hotspot-actions">
+                <select id="hotspotProvider" class="input" style="padding: 10px 16px; border: 1px solid var(--glass-border); border-radius: 8px; background: var(--card-bg, #1e293b); color: white; font-size: 14px; font-weight: 500; min-width: 140px; transition: var(--transition-smooth);">
+                    <option value="volcengine" selected>豆包 (Ark)</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="qwen3.5-plus">Qwen 3.5 Plus</option>
+                    <option value="glm-5">GLM 5</option>
+                    <option value="glm-4.7">GLM 4.7</option>
+                    <option value="kimi-k2.5">Kimi K2.5</option>
+                    <option value="MiniMax-M2.5">MiniMax M2.5</option>
+                    <option value="gemini">Gemini 1.5</option>
+                </select>
+                <div class="time-window-selector">
+                    <select id="globalHours">
+                        <option value="6">最近 6 小时</option>
+                        <option value="12">最近 12 小时</option>
+                        <option value="24" selected>最近 24 小时</option>
+                        <option value="48">最近 48 小时</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" id="btnRefreshAll">
+                    <span>🔄</span> 刷新全部
+                </button>
+                <button class="btn btn-secondary" id="btnRunAll">
+                    <span>▶️</span> 执行检测
+                </button>
+            </div>
+        </div>
+
+        <!-- 5个分类面板 -->
+        <div class="hotspot-grid" id="hotspotGrid">
+            <!-- 面板由 JS 动态生成 -->
+        </div>
+    </main>
+
+    <!-- 配置弹窗 -->
+    <div class="config-modal" id="configModal">
+        <div class="config-modal-content">
+            <div class="config-modal-header">
+                <h3 id="configModalTitle">分类配置</h3>
+                <button class="btn btn-secondary" onclick="closeConfigModal()">✕</button>
+            </div>
+            <div class="config-modal-body">
+                <input type="hidden" id="configCategoryId">
+
+                <div class="config-field">
+                    <label>启用状态</label>
+                    <select id="configEnabled">
+                        <option value="true">启用</option>
+                        <option value="false">禁用</option>
+                    </select>
+                </div>
+
+                <div class="config-field">
+                    <label>时间窗口（小时）</label>
+                    <input type="number" id="configHours" min="1" max="168" value="24">
+                </div>
+
+                <div class="config-field">
+                    <label>最大结果数</label>
+                    <input type="number" id="configMaxResults" min="1" max="50" value="15">
+                </div>
+
+                <div class="config-field">
+                    <label>定时计划（Cron）</label>
+                    <input type="text" id="configSchedule" placeholder="0 */4 * * *">
+                    <small style="color: var(--text-secondary);">例：0 */4 * * * 表示每4小时执行</small>
+                </div>
+
+                <div class="config-field">
+                    <label>关键字（每行一个）</label>
+                    <textarea id="configKeywords" placeholder="中国&#10;北京&#10;外交部"></textarea>
+                </div>
+            </div>
+            <div class="config-modal-footer">
+                <button class="btn btn-secondary" onclick="closeConfigModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveConfig()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════════════
+        // 全局变量
+        // ═══════════════════════════════════════════════════════════════════════
+
+        const CATEGORIES = [
+            { id: 'china_related', name: '外媒报道中国', icon: '🇨🇳', color: '#ef4444' },
+            { id: 'us_news', name: '美国新闻', icon: '🇺🇸', color: '#3b82f6' },
+            { id: 'japan_news', name: '日本新闻', icon: '🇯🇵', color: '#f59e0b' },
+            { id: 'middle_east', name: '中东新闻', icon: '🏜️', color: '#10b981' },
+            { id: 'hk_tw_macau', name: '港澳台新闻', icon: '🌏', color: '#8b5cf6' },
+            { id: 'asia_neighbors', name: '亚洲周边国家', icon: '🌏', color: '#06b6d4' }
+        ];
+
+        let categoriesConfig = {};
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // API 调用
+        // ═══════════════════════════════════════════════════════════════════════
+
+        async function api(url, options = {}) {
+            const resp = await fetch(url, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
+                body: options.body ? JSON.stringify(options.body) : undefined
+            });
+            return resp.json();
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // 初始化
+        // ═══════════════════════════════════════════════════════════════════════
+
+        async function init() {
+            await loadCategories();
+            await loadAllHotspots();
+        }
+
+        async function loadCategories() {
+            const data = await api('/api/hotspot/categories');
+            categoriesConfig = {};
+            (data.categories || []).forEach(c => {
+                categoriesConfig[c.id] = c;
+            });
+            renderPanels();
+        }
+
+        function renderPanels() {
+            const grid = document.getElementById('hotspotGrid');
+            grid.innerHTML = CATEGORIES.map(cat => {
+                const config = categoriesConfig[cat.id] || {};
+                const enabled = config.enabled !== false;
+                const lastExecuted = config.last_executed ?
+                    new Date(config.last_executed).toLocaleString('zh-CN', {
+                        month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    }) : '从未执行';
+
+                return `
+                    <div class="category-panel" id="panel-${cat.id}">
+                        <div class="category-header ${enabled ? '' : 'disabled'}" style="background: linear-gradient(135deg, ${cat.color} 0%, ${cat.color}99 100%)">
+                            <div class="category-title">
+                                <span style="font-size: 20px">${cat.icon}</span>
+                                <h3>${cat.name}</h3>
+                            </div>
+                            <div class="category-actions">
+                                <button onclick="refreshCategory('${cat.id}')" title="刷新">🔄</button>
+                                <button onclick="runCategory('${cat.id}')" title="立即执行">▶️</button>
+                                <button onclick="openConfig('${cat.id}')" title="配置">⚙️</button>
+                            </div>
+                        </div>
+                        <div class="category-meta">
+                            <span>⏱️ ${lastExecuted}</span>
+                            <span>📅 ${config.hours || 24}h</span>
+                            <span>🔢 最多 ${config.max_results || 15} 条</span>
+                        </div>
+                        <div class="hotspot-list" id="list-${cat.id}">
+                            <div class="hotspot-empty">
+                                <div class="hotspot-empty-icon">📭</div>
+                                <div>点击刷新加载数据</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // 加载热点数据
+        // ═══════════════════════════════════════════════════════════════════════
+
+        async function loadAllHotspots() {
+            const hours = document.getElementById('globalHours').value;
+
+            for (const cat of CATEGORIES) {
+                await loadCategoryHotspots(cat.id, hours);
+            }
+        }
+
+        async function loadCategoryHotspots(categoryId, hours) {
+            const list = document.getElementById(`list-${categoryId}`);
+            list.innerHTML = '<div class="hotspot-empty"><div class="hotspot-empty-icon">⏳</div><div>加载中...</div></div>';
+
+            try {
+                const data = await api(`/api/hotspot/scheduled?category=${categoryId}`);
+                const results = data.results || [];
+
+                if (results.length === 0) {
+                    list.innerHTML = `
+                        <div class="hotspot-empty">
+                            <div class="hotspot-empty-icon">📭</div>
+                            <div>暂无数据，点击执行检测</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const latest = results[0];
+                const events = latest.events || [];
+
+                if (events.length === 0) {
+                    list.innerHTML = `
+                        <div class="hotspot-empty">
+                            <div class="hotspot-empty-icon">🔍</div>
+                            <div>未检测到热点</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                list.innerHTML = events.map((e, i) => {
+                    const timeStr = e.latest_published
+                        ? new Date(e.latest_published).toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})
+                        : '刚刚';
+                    return `
+                        <div class="hotspot-item" onclick="showEventDetail('${categoryId}', ${i})">
+                            <div class="hotspot-item-header">
+                                <div class="hotspot-title">${escapeHtml(e.title)}</div>
+                                <div class="hotspot-score">${e.score}</div>
+                            </div>
+                            <div class="hotspot-meta">
+                                <span><span style="font-size:14px">🕒</span> ${timeStr}</span>
+                                <span><span style="font-size:14px">📰</span> ${e.media_count || (e.platforms || []).length} 家媒体</span>
+                                <span><span style="font-size:14px">📄</span> ${e.article_count || e.count || 0} 篇文章</span>
+                            </div>
+                            ${(e.tags || []).length > 0 ? `
+                                <div class="hotspot-tags">
+                                    ${e.tags.slice(0, 5).map(t => `<span class="hotspot-tag">${escapeHtml(t)}</span>`).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('');
+
+                // 存储事件数据用于详情展示
+                currentEventsData[categoryId] = events;
+
+            } catch (error) {
+                list.innerHTML = `
+                    <div class="hotspot-empty">
+                        <div class="hotspot-empty-icon">❌</div>
+                        <div>加载失败: ${error.message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // 操作函数
+        // ═══════════════════════════════════════════════════════════════════════
+
+        async function refreshCategory(categoryId) {
+            const panel = document.getElementById(`panel-${categoryId}`);
+            panel.classList.add('refreshing');
+
+            const hours = document.getElementById('globalHours').value;
+            await loadCategoryHotspots(categoryId, hours);
+
+            setTimeout(() => panel.classList.remove('refreshing'), 500);
+        }
+
+        async function runCategory(categoryId) {
+            const hours = parseInt(document.getElementById('globalHours').value);
+            const provider = document.getElementById('hotspotProvider').value;
+            const maxResults = categoriesConfig[categoryId]?.max_results || 15;
+
+            const panel = document.getElementById(`panel-${categoryId}`);
+            panel.classList.add('refreshing');
+
+            try {
+                await api('/api/hotspot/execute', {
+                    method: 'POST',
+                    body: { category: categoryId, hours, max_results: maxResults, provider: provider }
+                });
+
+                // 等待一下再刷新
+                await new Promise(r => setTimeout(r, 1000));
+                await loadCategoryHotspots(categoryId, hours);
+                await loadCategories(); // 更新最后执行时间
+
+            } catch (error) {
+                alert('执行失败: ' + error.message);
+            }
+
+            panel.classList.remove('refreshing');
+        }
+
+        async function refreshAll() {
+            document.getElementById('btnRefreshAll').disabled = true;
+            await loadAllHotspots();
+            document.getElementById('btnRefreshAll').disabled = false;
+        }
+
+        async function runAll() {
+            document.getElementById('btnRunAll').disabled = true;
+
+            for (const cat of CATEGORIES) {
+                await runCategory(cat.id);
+            }
+
+            document.getElementById('btnRunAll').disabled = false;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // 配置弹窗
+        // ═══════════════════════════════════════════════════════════════════════
+
+        function openConfig(categoryId) {
+            const config = categoriesConfig[categoryId] || {};
+
+            document.getElementById('configCategoryId').value = categoryId;
+            document.getElementById('configModalTitle').textContent = (CATEGORIES.find(c => c.id === categoryId)?.name || categoryId) + ' 配置';
+            document.getElementById('configEnabled').value = config.enabled !== false ? 'true' : 'false';
+            document.getElementById('configHours').value = config.hours || 24;
+            document.getElementById('configMaxResults').value = config.max_results || 15;
+            document.getElementById('configSchedule').value = config.schedule || '0 */4 * * *';
+            document.getElementById('configKeywords').value = (config.keywords || []).join('\n');
+
+            document.getElementById('configModal').classList.add('active');
+        }
+
+        function closeConfigModal() {
+            document.getElementById('configModal').classList.remove('active');
+        }
+
+        async function saveConfig() {
+            const categoryId = document.getElementById('configCategoryId').value;
+            const keywords = document.getElementById('configKeywords').value
+                .split('\n')
+                .map(k => k.trim())
+                .filter(k => k);
+
+            const payload = {
+                enabled: document.getElementById('configEnabled').value === 'true',
+                hours: parseInt(document.getElementById('configHours').value),
+                max_results: parseInt(document.getElementById('configMaxResults').value),
+                schedule: document.getElementById('configSchedule').value,
+                keywords: keywords
+            };
+
+            try {
+                await api(`/api/hotspot/config/${categoryId}`, {
+                    method: 'PUT',
+                    body: payload
+                });
+
+                closeConfigModal();
+                await loadCategories();
+
+            } catch (error) {
+                alert('保存失败: ' + error.message);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // 工具函数
+        // ═══════════════════════════════════════════════════════════════════════
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;');
+        }
+
+        // 存储当前加载的事件数据，用于详情展示
+        let currentEventsData = {};
+
+        function showEventDetail(categoryId, index) {
+            const events = currentEventsData[categoryId] || [];
+            const event = events[index];
+            if (!event) {
+                console.log('Event not found:', categoryId, index);
+                return;
+            }
+
+            // 创建详情弹窗
+            const modal = document.createElement('div');
+            modal.className = 'config-modal active';
+            modal.id = 'eventDetailModal';
+
+            const articles = event.articles || [];
+            const articleListHtml = articles.length > 0 ? articles.map(a => {
+                const pubTime = a.published ? new Date(a.published).toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+                const url = a.url || '';
+                return `
+                    <div class="event-article-item">
+                        <div class="ea-title">${url ? `<a href="${escapeHtml(url)}" target="_blank" style="color:inherit;text-decoration:none;">${escapeHtml(a.title)}</a>` : escapeHtml(a.title)}</div>
+                        <div class="ea-meta">
+                            <span>${escapeHtml(a.platform || '')}</span>
+                            ${pubTime ? `<span>🕒 ${pubTime}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('') : '<div style="padding:20px;text-align:center;color:var(--text-secondary);">暂无相关文章</div>';
+
+            modal.innerHTML = `
+                <div class="config-modal-content" style="max-width: 600px;">
+                    <div class="config-modal-header">
+                        <h3>${escapeHtml(event.title)}</h3>
+                        <button class="btn btn-secondary" onclick="closeEventDetailModal()">✕</button>
+                    </div>
+                    <div class="config-modal-body" style="max-height: 60vh; overflow-y: auto;">
+                        <div style="margin-bottom: 16px; display: flex; gap: 16px; flex-wrap: wrap;">
+                            <span style="padding: 4px 12px; background: rgba(139,92,246,0.2); border-radius: 20px; font-size: 13px;">🔥 热度 ${event.score}</span>
+                            <span style="padding: 4px 12px; background: rgba(59,130,246,0.2); border-radius: 20px; font-size: 13px;">📰 ${event.media_count || 0} 家媒体</span>
+                            <span style="padding: 4px 12px; background: rgba(16,185,129,0.2); border-radius: 20px; font-size: 13px;">📄 ${event.article_count || 0} 篇文章</span>
+                        </div>
+                        ${(event.tags || []).length > 0 ? `
+                            <div style="margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px;">
+                                ${event.tags.slice(0, 8).map(t => `<span style="padding: 2px 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px;">${escapeHtml(t)}</span>`).join('')}
+                            </div>
+                        ` : ''}
+                        <div class="event-articles-list">
+                            ${articleListHtml}
+                        </div>
+                    </div>
+                    <div class="config-modal-footer">
+                        <button class="btn btn-secondary" onclick="closeEventDetailModal()">关闭</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            modal.onclick = function(e) {
+                if (e.target === modal) closeEventDetailModal();
+            };
+        }
+
+        function closeEventDetailModal() {
+            const modal = document.getElementById('eventDetailModal');
+            if (modal) modal.remove();
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // 事件绑定
+        // ═══════════════════════════════════════════════════════════════════════
+
+        document.getElementById('btnRefreshAll').onclick = refreshAll;
+        document.getElementById('btnRunAll').onclick = runAll;
+        document.getElementById('globalHours').onchange = loadAllHotspots;
+
+        // 点击弹窗外部关闭
+        document.getElementById('configModal').onclick = function(e) {
+            if (e.target === this) closeConfigModal();
+        };
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>

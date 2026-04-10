@@ -14,7 +14,7 @@ import ssl
 import feedparser, yaml
 import requests  # 新增 requests 用于 Jina API
 import threading
-from llm_tagger import is_english_text, batch_translate_to_chinese, translate_text, load_llm_config
+from llm_tagger import is_english_text, batch_translate_to_chinese, translate_text, load_llm_config, get_translation_config, extract_chinese_outline, batch_extract_outlines
 
 progress_lock = threading.Lock()
 
@@ -445,7 +445,7 @@ def _parse_relative_time(text: str, now: datetime) -> datetime:
 
 
 def scrape_zaobao_listing(page_url: str, timeout: int = 30, fetch_detail_time: bool = True) -> list[dict]:
-    """抓取联合早报等网页列表，并可选抓取详情页来获取真实发布时间。"""
+    """抓取联合早报等网页列表，并可选抓取详情页来获取真实发布时间和图片。"""
     now = datetime.now(TZ_BJ)
 
     html = fetch_html(page_url, timeout=timeout)
@@ -455,7 +455,7 @@ def scrape_zaobao_listing(page_url: str, timeout: int = 30, fetch_detail_time: b
 
     results = []
     seen_urls = set()
-    
+
     # 匹配核心文章链接模式：/news/.../storyYYYYMMDD-ID
     # 我们先找出所有符合特征的 <a> 标签块，再从中提取链接和可能作为标题的文本
     # 扩大匹配范围，捕获带有 storyID 的所有链接，并允许链接前后有更多属性
@@ -463,22 +463,22 @@ def scrape_zaobao_listing(page_url: str, timeout: int = 30, fetch_detail_time: b
         r'<a[^>]+href=["\']([^"\']*?story\d{8}-\d+)[^"\']*["\'][^>]*>(.*?)</a>',
         re.IGNORECASE | re.DOTALL
     )
-    
+
     import urllib.parse
     for match in link_block_pattern.finditer(html):
         raw_url = match.group(1).strip()
         # 提取 <a> 标签内部的所有内容，并去除 HTML 标签作为备选标题
         inner_content = match.group(2)
         title = strip_html(inner_content).strip()
-        
+
         # 如果 <a> 标签内没有有效文字（可能只有图片），尝试通过 URL 里的 slug 或者是邻近元素（但这在正则里很难）
         # 这里我们做个妥协：如果标题太短或为空，我们从 HTML 中尝试找寻该链接对应的标题文本
         if not title or len(title) < 2:
             # 搜索链接附近的标题特征 (Zaobao 常用 <span class="video-title"> 或类似的)
             continue
-            
+
         full_url = urllib.parse.urljoin('https://www.zaobao.com.sg', raw_url)
-        
+
         # 仅针对故事链接进行处理
         if '/story' not in full_url:
             continue
@@ -486,14 +486,21 @@ def scrape_zaobao_listing(page_url: str, timeout: int = 30, fetch_detail_time: b
         if full_url in seen_urls:
             continue
         seen_urls.add(full_url)
-        
+
+        # 尝试从 <a> 标签内提取图片
+        img_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', inner_content, re.IGNORECASE)
+        image_url = img_match.group(1) if img_match else ''
+        # 处理相对路径
+        if image_url and not image_url.startswith('http'):
+            image_url = urllib.parse.urljoin('https://www.zaobao.com.sg', image_url)
+
         results.append({
             'url': full_url,
             'title': title,
             'summary': '',
             'published': None,
             '_dt': None,
-            'image': '',
+            'image': image_url,
             '_has_rss_time': False,
             '_fixed_html_time': False,
         })
@@ -508,6 +515,19 @@ def scrape_zaobao_listing(page_url: str, timeout: int = 30, fetch_detail_time: b
                     item['published'] = dt.isoformat()
                     item['_has_rss_time'] = True
                     item['_fixed_html_time'] = True
+                # 如果列表页没拿到图片，尝试从详情页提取
+                if not item.get('image'):
+                    img_patterns = [
+                        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+                        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+                        r'<img[^>]+class=["\'][^"\']*article[^"\']*["\'][^>]+src=["\']([^"\']+)["\']',
+                        r'<figure[^>]*>.*?<img[^>]+src=["\']([^"\']+)["\']',
+                    ]
+                    for pattern in img_patterns:
+                        img_match = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
+                        if img_match:
+                            item['image'] = img_match.group(1)
+                            break
             return item
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
@@ -722,6 +742,16 @@ def main():
                     continue
                 for a_idx, article in enumerate(scraped):
                     import time; time.sleep(0.015)
+
+                    # 判断是否为新文章
+                    article_is_new = False
+                    article_uh = uhash(article['url'])
+                    article_th = thash(article['title'])
+                    if cutoff and article['_dt']:
+                        if article['_dt'] >= cutoff:
+                            if article_uh not in seen_urls and article_th not in seen_titles:
+                                article_is_new = True
+
                     with progress_lock:
                         try:
                             print(f'[PROGRESS] ' + json.dumps({
@@ -732,8 +762,10 @@ def main():
                                 'article_idx': a_idx + 1,
                                 'article_total': len(scraped),
                                 'article_title': article['title'][:50] + ('...' if len(article['title']) > 50 else ''),
+                                'article_url': article['url'],
                                 'article_time': article['_dt'].strftime('%m-%d %H:%M') if article['_dt'] else '',
-                                'image': article.get('image', '')
+                                'image': article.get('image', ''),
+                                'is_new': article_is_new
                             }, ensure_ascii=False), file=sys.stderr)
                         except: pass
                     item = {
@@ -762,10 +794,37 @@ def main():
                     warn_feeds.append(f'{platform}(API 无结果)')
                     continue
                 for a_idx, article in enumerate(scraped):
+                    import time; time.sleep(0.015)
+
+                    # 判断是否为新文章
+                    article_is_new = False
+                    article_uh = uhash(article['url'])
+                    article_th = thash(article['title'])
+                    if cutoff and article['_dt']:
+                        if article['_dt'] >= cutoff:
+                            if article_uh not in seen_urls and article_th not in seen_titles:
+                                article_is_new = True
+
+                    with progress_lock:
+                        try:
+                            print(f'[PROGRESS] ' + json.dumps({
+                                'type': 'article',
+                                'feed_name': platform,
+                                'feed_idx': idx + 1,
+                                'feed_total': total_feeds,
+                                'article_idx': a_idx + 1,
+                                'article_total': len(scraped),
+                                'article_title': article['title'][:50] + ('...' if len(article['title']) > 50 else ''),
+                                'article_time': article['_dt'].strftime('%m-%d %H:%M') if article['_dt'] else '',
+                                'image': article.get('image', ''),
+                                'is_new': article_is_new
+                            }, ensure_ascii=False), file=sys.stderr)
+                        except: pass
+
                     item = {
                         'url':      article['url'],
-                        'uh':       uhash(article['url']),
-                        'th':       thash(article['title']),
+                        'uh':       article_uh,
+                        'th':       article_th,
                         'title':    article['title'],
                         'platform': platform,
                         'country':  fc.get('country', '').strip(),
@@ -847,6 +906,7 @@ def main():
                             'article_idx': processed_count[0],
                             'article_total': total_entries,
                             'article_title': title[:50] + ('...' if len(title) > 50 else ''),
+                            'article_url': url,
                             'article_time': final_dt.strftime('%m-%d %H:%M') if final_dt else '',
                             'image': get_image(e),
                             'is_new': is_new
@@ -1031,52 +1091,68 @@ def main():
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             list(executor.map(fetch_jina, jina_tasks))
 
-    # 4.5 [AI Translation] 全量中文化转换
+    # 4.5 [AI Outline Extraction] 全量大纲提取（替代翻译）
     all_new = timed_final + no_time_final
     if all_new:
         llm_cfg = load_llm_config()
-        if llm_cfg and llm_cfg.get('llm', {}).get('enabled'):
-            # 批量翻译标题
+        trans_cfg = get_translation_config(llm_cfg)
+
+        if trans_cfg and trans_cfg.get('llm', {}).get('enabled'):
+            # 1. 批量翻译标题（保留，用于显示）
             titles_to_check = [a['title'] for a in all_new]
-            title_map = batch_translate_to_chinese(titles_to_check, llm_cfg)
-            
-            # 批量翻译摘要
-            summaries_to_check = [a['summary'] for a in all_new if a.get('summary')]
-            summary_map = batch_translate_to_chinese(summaries_to_check, llm_cfg)
-            
-            # 更新已翻译的内容
+            title_map = batch_translate_to_chinese(titles_to_check, trans_cfg)
+
             for item in all_new:
                 item['title'] = title_map.get(item['title'], item['title'])
-                if item.get('summary'):
-                    item['summary'] = summary_map.get(item['summary'], item['summary'])
 
-            # 正文内容翻译 (逐篇处理，仅针对英文正文)
-            content_tasks = [item for item in all_new if item.get('content') and is_english_text(item['content'][:1000])]
-            if content_tasks:
+            # 2. 批量提取大纲（替代正文翻译）
+            with progress_lock:
+                print(f'[PROGRESS] ' + json.dumps({
+                    'type': 'outline_start',
+                    'total': len(all_new)
+                }, ensure_ascii=False), file=sys.stderr)
+
+            outline_processed = [0]
+            def extract_outline_task(item):
                 with progress_lock:
-                    print(f'[PROGRESS] ' + json.dumps({
-                        'type': 'trans_start',
-                        'total': len(content_tasks)
-                    }, ensure_ascii=False), file=sys.stderr)
-                
-                trans_processed = [0]
-                def translate_content_task(item):
-                    with progress_lock:
-                        trans_processed[0] += 1
-                        try:
-                            print(f'[PROGRESS] ' + json.dumps({
-                                'type': 'trans_article',
-                                'trans_idx': trans_processed[0],
-                                'trans_total': len(content_tasks),
-                                'article_title': item['title'][:50]
-                            }, ensure_ascii=False), file=sys.stderr)
-                        except: pass
-                    # 执行 AI 翻译
-                    item['content'] = translate_text(item['content'], llm_cfg)
+                    outline_processed[0] += 1
+                    try:
+                        print(f'[PROGRESS] ' + json.dumps({
+                            'type': 'outline_article',
+                            'outline_idx': outline_processed[0],
+                            'outline_total': len(all_new),
+                            'article_title': item['title'][:50]
+                        }, ensure_ascii=False), file=sys.stderr)
+                    except: pass
 
-                # 并行执行翻译任务 (限制并发数)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-                    list(executor.map(translate_content_task, content_tasks))
+                # 根据是否有完整正文，选择不同策略
+                content = item.get('content', '')
+                title = item.get('title', '')
+                summary = item.get('summary', '')
+
+                if content and len(content) > 200:
+                    # 有完整正文（Jina 抓取）
+                    outline = extract_chinese_outline(content, trans_cfg, 'full_content')
+                    if outline:
+                        item['content'] = outline
+                    else:
+                        # 降级：使用 title + summary
+                        combined = f"标题：{title}\n摘要：{summary}"
+                        outline = extract_chinese_outline(combined, trans_cfg, 'title_summary')
+                        item['content'] = outline or f"{title}\n{summary}"
+                else:
+                    # 无完整正文，使用 title + summary
+                    combined = f"标题：{title}\n摘要：{summary}"
+                    outline = extract_chinese_outline(combined, trans_cfg, 'title_summary')
+                    item['content'] = outline or combined
+
+            # 并行执行大纲提取（限制并发数，本地 LLM 资源有限）
+            outline_cfg = trans_cfg.get('llm', {}).get('outline_extraction', {})
+            max_workers = outline_cfg.get('max_workers', 2)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                list(executor.map(extract_outline_task, all_new))
+
+            print(f'[INFO] 大纲提取完成: {len(all_new)} 篇', file=sys.stderr)
 
     # 4.5 SQLite 入库
     db_inserted = 0

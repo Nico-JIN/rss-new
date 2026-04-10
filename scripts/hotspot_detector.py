@@ -39,11 +39,27 @@ except ImportError:
 # 配置区
 # ═══════════════════════════════════════════════════════════════════
 
-# 中国相关关键词
+# 国家相关关键词
 CHINA_KEYWORDS = {
     '中国', '北京', '中方', '外交部', '华', '南海', '台海', '台湾', '香港',
     '贸易战', '一带一路', '习近平', '李克强', '政治局', '国防部', '解放军',
     '制裁中国', '对华', '中美', '中欧', '中俄', '中日', '中韩', '中印'
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# 高频实体惩罚（这些实体太常见，不能作为聚类主要依据）
+# ═══════════════════════════════════════════════════════════════════
+GENERIC_ENTITIES = {
+    # 国家级实体（几乎每篇国际新闻都有）
+    '美国', '中国', '日本', '俄罗斯', '英国', '法国', '德国', '韩国', '伊朗', '以色列',
+    'us', 'usa', 'china', 'japan', 'russia', 'uk', 'britain', 'france', 'germany',
+    'iran', 'israel', 'korea',
+    # 高频人名（出现频率过高，不能区分事件）
+    '特朗普', '拜登', '普京', '习近平', '岸田', '马克龙', '苏纳克', '莫迪',
+    'trump', 'biden', 'putin', 'xi', 'kishida', 'macron', 'sunak', 'modi',
+    # 高频机构
+    '白宫', '国防部', '外交部', '联合国', '国会', '参议院', '众议院',
+    'white house', 'pentagon', 'un', 'congress', 'senate',
 }
 
 # 核心媒体权威度权重（影响热度评分）
@@ -101,6 +117,25 @@ def get_media_weight(platform: str) -> float:
 # 核心算法
 # ═══════════════════════════════════════════════════════════════════
 
+def _clean_title(title: str) -> str:
+    """清洗标题，移除URL片段和垃圾数据"""
+    if not title:
+        return ''
+
+    # 移除常见的URL跟踪参数
+    title = re.sub(r'\?taid=[a-f0-9]+', '', title, flags=re.IGNORECASE)
+    title = re.sub(r'ers\?taid=.*$', '', title, flags=re.IGNORECASE)
+    title = re.sub(r'&utm_[a-z]+=[^\s]*', '', title, flags=re.IGNORECASE)
+
+    # 移除多余空白
+    title = re.sub(r'\s+', ' ', title).strip()
+
+    # 移除首尾的特殊字符
+    title = title.strip(' -–—:：')
+
+    return title
+
+
 def _tokenize(text: str) -> list:
     """分词：提取中文词组和英文单词"""
     if not text:
@@ -149,30 +184,56 @@ def _calc_similarity(title1: str, title2: str) -> float:
     """
     计算两篇文章标题的相似度
     综合考虑：词重叠、实体重叠、字符级相似
+
+    核心改进：大幅惩罚高频实体（特朗普、拜登等），只有具体事件实体才能聚类
     """
     if not title1 or not title2:
         return 0.0
 
-    # 1. 词汇Jaccard相似度
-    words1 = set(_tokenize(title1))
-    words2 = set(_tokenize(title2))
+    # 清洗标题
+    title1 = _clean_title(title1)
+    title2 = _clean_title(title2)
+
+    # 1. 词汇Jaccard相似度 (剔除高频无意义词汇后的重叠)
+    words1 = set(w for w in _tokenize(title1) if len(w) > 1)
+    words2 = set(w for w in _tokenize(title2) if len(w) > 1)
+
+    # 高频通用词汇（不能作为聚类依据）
+    generic_words = {'美国', '中国', '政府', '总统', '国家', '社会', '经济', '政治',
+                     '表示', '称', '说', '报道', '根据', '已经', '正在', '可能', '将'}
+    overlap_words = words1 & words2
+    meaningful_overlap = overlap_words - generic_words
 
     if words1 and words2:
-        word_jaccard = len(words1 & words2) / len(words1 | words2)
+        word_jaccard = (len(meaningful_overlap) * 1.5 + len(overlap_words & generic_words) * 0.1) / len(words1 | words2)
+        word_jaccard = min(word_jaccard, 1.0)
     else:
         word_jaccard = 0.0
 
-    # 2. 命名实体重叠（权重更高）
+    # 2. 命名实体重叠（惩罚高频实体）
     entities1 = _extract_entities(title1)
     entities2 = _extract_entities(title2)
 
+    # 初始化变量
+    meaningful_ents = set()
+    generic_overlap = set()
+
     if entities1 and entities2:
-        entity_overlap = len(entities1 & entities2) / min(len(entities1), len(entities2))
-        # 实体完全匹配时大幅提升相似度
-        if entities1 == entities2:
-            entity_score = 0.8
+        overlap_ents = entities1 & entities2
+
+        # 分离高频实体和具体实体
+        meaningful_ents = overlap_ents - GENERIC_ENTITIES
+        generic_overlap = overlap_ents & GENERIC_ENTITIES
+
+        # 只有具体实体才给高分
+        if len(meaningful_ents) >= 2:
+            entity_score = 0.6 + 0.1 * len(meaningful_ents)
+        elif len(meaningful_ents) == 1:
+            entity_score = 0.35
+        elif len(generic_overlap) > 0:
+            entity_score = 0.05 * len(generic_overlap)
         else:
-            entity_score = entity_overlap * 0.5
+            entity_score = 0.0
     else:
         entity_score = 0.0
 
@@ -188,11 +249,32 @@ def _calc_similarity(title1: str, title2: str) -> float:
         char_jaccard = 0.0
 
     # 综合评分
+    # 关键改进：字符相似度高时，即使没有具体实体也允许聚类
     final_score = (
-        word_jaccard * 0.4 +    # 词汇相似度
-        entity_score * 0.4 +     # 实体重合度
-        char_jaccard * 0.2       # 字符相似度
+        word_jaccard * 0.25 +
+        entity_score * 0.45 +
+        char_jaccard * 0.30  # 提高字符相似度权重
     )
+
+    # 放宽条件：字符相似度 > 0.4 时给予基础分
+    if char_jaccard > 0.4:
+        base_from_char = char_jaccard * 0.6
+        final_score = max(final_score, base_from_char)
+
+    # 如果只有高频实体重叠，但仍有一定字符相似度(>0.3)，给予部分分
+    if len(meaningful_ents) == 0 and len(generic_overlap) > 0 and char_jaccard > 0.3:
+        final_score = max(final_score, char_jaccard * 0.4 + entity_score * 0.3)
+
+    # 额外提升：如果字符相似度>0.25，检查是否有事件关键词
+    if char_jaccard > 0.25:
+        # 事件关键词（直接用子串匹配，不依赖分词）
+        event_keywords = ['宣布', '签署', '访问', '会见', '讨论', '协议', '停火', '关税',
+                          '制裁', '会议', '会谈', '达成', '通过', '批准', '拒绝', '表示',
+                          '对华', '访华', '访美', '访日', '首次', '紧急', '重要']
+        for kw in event_keywords:
+            if kw in title1 and kw in title2:
+                final_score = max(final_score, char_jaccard * 0.5 + 0.18)
+                break
 
     return final_score
 
@@ -244,11 +326,18 @@ def _calc_continuous_coverage_score(articles: list) -> float:
         return 0.0
 
 
-def _cluster_articles(articles: list, threshold: float = 0.35) -> list:
+def _cluster_articles(articles: list, threshold: float = 0.30) -> list:
     """
     文章聚类：将相似的文章归为同一事件簇
 
-    使用增量聚类算法，避免两两比较的O(n²)复杂度
+    改进版：
+    1. 提高阈值（0.45），减少误聚类
+    2. 对大簇进行二次分割
+    3. 加入时间约束
+
+    Args:
+        articles: 文章列表
+        threshold: 相似度阈值（默认0.45，比之前0.35更严格）
     """
     if not articles:
         return []
@@ -268,6 +357,21 @@ def _cluster_articles(articles: list, threshold: float = 0.35) -> list:
             rep_title = cluster['representative'].get('title', '')
             score = _calc_similarity(title, rep_title)
 
+            # 时间约束：同一簇的文章时间跨度不超过72小时
+            if score > threshold and cluster['items']:
+                try:
+                    cluster_times = [
+                        datetime.fromisoformat(a['published'].replace('Z', '+00:00'))
+                        for a in cluster['items'] if a.get('published')
+                    ]
+                    if cluster_times:
+                        new_time = datetime.fromisoformat(article['published'].replace('Z', '+00:00'))
+                        max_span = max(abs((new_time - t).total_seconds()) for t in cluster_times)
+                        if max_span > 72 * 3600:  # 72小时
+                            score = 0  # 时间跨度过大，拒绝加入
+                except:
+                    pass
+
             if score > threshold and score > best_score:
                 best_score = score
                 best_cluster_idx = idx
@@ -282,7 +386,60 @@ def _cluster_articles(articles: list, threshold: float = 0.35) -> list:
                 'items': [article]
             })
 
-    return clusters
+    # ── 二次分割：对超过15篇的簇进行细分 ──
+    final_clusters = []
+    for cluster in clusters:
+        if len(cluster['items']) > 15:
+            # 使用更严格的阈值重新聚类
+            sub_clusters = _recluster_large_cluster(cluster, threshold=0.55)
+            final_clusters.extend(sub_clusters)
+        else:
+            final_clusters.append(cluster)
+
+    return final_clusters
+
+
+def _recluster_large_cluster(cluster: dict, threshold: float = 0.55) -> list:
+    """
+    对大簇进行二次细分
+
+    使用更严格的阈值，重新聚类簇内文章
+    """
+    items = cluster['items']
+    if len(items) <= 15:
+        return [cluster]
+
+    sub_clusters = []
+
+    for article in items:
+        title = article.get('title', '')
+        if not title:
+            continue
+
+        best_idx = -1
+        best_score = 0.0
+
+        for idx, sub in enumerate(sub_clusters):
+            rep_title = sub['representative'].get('title', '')
+            score = _calc_similarity(title, rep_title)
+
+            if score > threshold and score > best_score:
+                best_score = score
+                best_idx = idx
+
+        if best_idx >= 0:
+            sub_clusters[best_idx]['items'].append(article)
+        else:
+            sub_clusters.append({
+                'representative': article,
+                'items': [article]
+            })
+
+    # 如果二次聚类产生了很多小簇，合并回原簇
+    if len(sub_clusters) > len(items) // 3:
+        return [cluster]
+
+    return sub_clusters
 
 
 def _calc_cluster_score(cluster: list, hours: int) -> dict:
@@ -581,6 +738,8 @@ def detect_hot_events(
     min_articles: int = 2,
     max_results: int = 20,
     keyword: str = None,
+    provider: str = None,
+    exclude_chinese_media: bool = True,
     conn=None
 ) -> list:
     """
@@ -621,8 +780,8 @@ def detect_hot_events(
         articles = []
         for row in rows:
             a = dict(row)
-            # 1. 严格过滤中国媒体 (强制要求)
-            if is_chinese_media(a.get('platform', ''), a.get('url', '')):
+            # 1. 根据参数决定是否过滤中国媒体
+            if exclude_chinese_media and is_chinese_media(a.get('platform', ''), a.get('url', '')):
                 continue
             
             # 2. 如果提供关键字，进行过滤 (增强匹配逻辑)
@@ -723,10 +882,18 @@ def detect_hot_events(
             # 生成事件标题（使用已翻译的第一篇文章标题）
             event_title = items[0].get('title', '') or _generate_event_title(items)
 
+            # 找到最新的发表时间
+            published_times = [a.get('published', '') for a in items if a.get('published')]
+            published_times.sort()
+            latest_published = published_times[-1] if published_times else ''
+            first_published = published_times[0] if published_times else ''
+
             event = {
                 'title': event_title,
                 'score': score_info['score'],
                 'count': len(items),
+                'latest_published': latest_published,
+                'first_published': first_published,
                 'platforms': score_info['details'].get('platforms', []),  # 主媒体名列表
                 'all_platforms': score_info['details'].get('all_platforms', []),  # 完整平台信息
                 'tags': _extract_keywords(items),
@@ -740,7 +907,7 @@ def detect_hot_events(
                 kw = keyword.lower()
                 event_title_lower = event_title.lower()
                 tags_str = ' '.join(event['tags']).lower()
-                
+
                 # 如果标题和核心标签都不包含关键字，则该热点不属于目标分类
                 if kw not in event_title_lower and kw not in tags_str:
                     # 允许地名缩写或其他同义词匹配（暂略，仅做基础匹配）
@@ -756,6 +923,9 @@ def detect_hot_events(
         # LLM 研判验证：对前三名热点进行智能筛选
         # ═════════════════════════════════════════════════════════════
         llm_cfg = load_llm_config()
+        if provider and llm_cfg and 'llm' in llm_cfg:
+            llm_cfg['llm']['provider'] = provider
+
         if llm_cfg and llm_cfg.get('llm', {}).get('enabled') and len(results) >= 1:
             print(f"\n[INFO] 开始对前 3 名热点进行 LLM 研判验证...")
 
@@ -838,6 +1008,7 @@ def get_hot_events_brief(hours: int = 24, max_results: int = 10) -> list:
                 {
                     'id': a.get('id'),
                     'title': a.get('title', ''),
+                    'url': a.get('url', ''),
                     'platform': a.get('platform', ''),
                     'published': a.get('published', ''),
                     'summary': a.get('summary', '')

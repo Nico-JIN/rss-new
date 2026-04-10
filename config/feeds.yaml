@@ -406,6 +406,60 @@ feeds:
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/Lndp9pfheU9lQH41.xml
+- city: 东京
+  country: 日本
+  fetch_jina: false
+  media_group: Yomiuri Shimbun
+  platform: 日本|Yomiuri Shimbun
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/fegFVyyVRDKH3vGv.xml
+- city: 东京
+  country: 日本
+  fetch_jina: false
+  media_group: 外务省
+  platform: 日本|外务省
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/qZVPg7qULMaEIItb.xml
+- city: 东京
+  country: 日本
+  fetch_jina: false
+  media_group: 日本
+  platform: 产经新闻|Sankei Shimbun
+  scrape_url: ''
+  time_only: false
+  timeout: 30
+  url: https://rss.app/feeds/tX8Iq7u3hANv8jCM.xml
+- city: 东京
+  country: 日本
+  fetch_jina: false
+  media_group: 日本媒体
+  platform: 产经新闻|中国
+  scrape_url: ''
+  time_only: true
+  timeout: 30
+  url: https://rss.app/feeds/yt5HYP5wpT0hm4Hn.xml
+- city: 香港
+  country: 中国香港
+  fetch_jina: false
+  media_group: 香港媒体
+  platform: 香港电台|RTHK
+  scrape_url: ''
+  time_only: false
+  timeout: 30
+  url: https://rss.app/feeds/6hfWYEBdPhNMgMoZ.xml
+- city: 台湾
+  country: 中国台湾
+  fetch_jina: false
+  media_group: 台湾媒体
+  platform: 中央通讯社（CNA）
+  scrape_url: ''
+  time_only: false
+  timeout: 30
+  url: https://rss.app/feeds/8y3umCenIv4Ds4XX.xml
 settings:
   auto_fetch: true
   interval_min: 20

@@ -322,6 +322,8 @@ def cmd_hotspot(args):
             'rank': rank,
             'title': event.get('title', ''),
             'score': event.get('score', 0),
+            'latest_published': event.get('latest_published', ''),
+            'first_published': event.get('first_published', ''),
             'media_count': len(event.get('platforms', [])),
             'article_count': event.get('count', 0),
             'platforms': event.get('platforms', []),

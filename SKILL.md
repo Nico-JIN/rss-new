@@ -148,3 +148,184 @@ python scripts/query.py --keyword "关税" --period week
 # 热点检测（旧版）
 python scripts/hotspot_detector.py --hours 24 --json
 ```
+
+---
+
+## 定时热点检测（6大分类）
+
+自动检测6类新闻热点，支持定时执行和手动触发。**所有接口返回 JSON 格式**。
+
+### 分类列表
+
+| ID | 名称 | 说明 |
+|----|------|------|
+| `china_related` | 外媒报道中国 | 排除中国媒体，仅看外媒视角 |
+| `us_news` | 美国新闻 | 美国内政、外交、军事、经济 |
+| `japan_news` | 日本新闻 | 日本政治、经济、军事、外交 |
+| `middle_east` | 中东新闻 | 中东冲突、石油、外交 |
+| `hk_tw_macau` | 港澳台新闻 | 港台政治、两岸关系 |
+| `asia_neighbors` | 亚洲周边国家 | 韩国、朝鲜、东南亚、南亚、中亚 |
+
+### CLI 命令（Agent 推荐）
+
+```bash
+# 获取指定分类热点（返回 JSON）
+python scripts/scheduled_hotspot.py --type china_related --hours 24 --json
+python scripts/scheduled_hotspot.py --type us_news --hours 24 --json
+python scripts/scheduled_hotspot.py --type japan_news --hours 24 --json
+python scripts/scheduled_hotspot.py --type middle_east --hours 24 --json
+python scripts/scheduled_hotspot.py --type hk_tw_macau --hours 24 --json
+python scripts/scheduled_hotspot.py --type asia_neighbors --hours 24 --json
+
+# 自定义时间窗口
+python scripts/scheduled_hotspot.py --type us_news --hours 6 --json
+python scripts/scheduled_hotspot.py --type china_related --hours 12 --json
+```
+
+### 返回 JSON 格式
+
+```json
+{
+  "category": "us_news",
+  "category_name": "美国新闻",
+  "executed_at": "2026-04-10T15:11:13+08:00",
+  "time_window_hours": 24,
+  "events": [
+    {
+      "title": "特朗普签署新关税令",
+      "score": 37.0,
+      "count": 4,
+      "media_count": 3,
+      "importance": "high",
+      "latest_published": "2026-04-10T14:30:00+08:00",
+      "platforms": ["路透社", "纽约时报", "BBC"],
+      "tags": ["特朗普", "关税", "中国"],
+      "summary": "特朗普宣布对中国商品加征关税...",
+      "is_china_related": true,
+      "items": [
+        {
+          "id": 18562,
+          "title": "特朗普签署新关税令 对中国商品加征25%",
+          "url": "https://www.reuters.com/article/...",
+          "platform": "路透社",
+          "published": "2026-04-10T14:30:00+08:00",
+          "summary": "..."
+        }
+      ]
+    }
+  ],
+  "event_count": 6,
+  "article_count": 25
+}
+```
+
+### Agent 使用示例
+
+**示例 1：获取美国新闻热点**
+```bash
+python scripts/scheduled_hotspot.py --type us_news --hours 24 --json
+```
+
+**示例 2：获取外媒报道中国（6小时窗口）**
+```bash
+python scripts/scheduled_hotspot.py --type china_related --hours 6 --json
+```
+
+**示例 3：获取亚洲周边国家热点**
+```bash
+python scripts/scheduled_hotspot.py --type asia_neighbors --hours 24 --json
+```
+
+### 其他 CLI 命令
+
+```bash
+# 查看帮助
+python scripts/scheduled_hotspot.py --help
+
+# 列出所有分类
+python scripts/scheduled_hotspot.py --list
+
+# 执行所有启用的检测
+python scripts/scheduled_hotspot.py --run-all
+
+# 执行指定分类（旧格式，仍可用）
+python scripts/scheduled_hotspot.py --run china_related --json
+
+# 查看历史记录
+python scripts/scheduled_hotspot.py --history
+python scripts/scheduled_hotspot.py --history --category china_related --days 7
+
+# 启动定时服务
+python scripts/scheduled_hotspot.py --daemon
+
+# 配置管理
+python scripts/scheduled_hotspot.py --enable china_related
+python scripts/scheduled_hotspot.py --disable japan_news
+```
+
+### API 接口
+
+```bash
+# 获取分类配置
+GET /api/hotspot/categories
+
+# 获取最新热点
+GET /api/hotspot/scheduled
+GET /api/hotspot/scheduled?category=china_related
+
+# 获取历史记录
+GET /api/hotspot/history?category=china_related&days=7
+
+# 手动执行
+POST /api/hotspot/execute
+{"category": "china_related", "hours": 24}
+
+# 修改配置
+PUT /api/hotspot/config/china_related
+{"hours": 12, "max_results": 20}
+```
+
+### 配置文件
+
+`config/hotspot_schedule.yaml`
+
+```yaml
+settings:
+  default_hours: 24
+  retention_days: 30
+
+categories:
+  china_related:
+    enabled: true
+    name: "外媒报道中国"
+    keywords: ["中国", "北京", "习近平", "外交部", "中美", "南海"]
+    hours: 24
+    max_results: 15
+    exclude_china_media: true
+    schedule: "0 */4 * * *"
+    
+  us_news:
+    enabled: true
+    name: "美国新闻"
+    keywords: ["美国", "特朗普", "拜登", "白宫", "美联储"]
+    hours: 24
+    max_results: 20
+    schedule: "0 */6 * * *"
+```
+
+### 定时计划（cron格式）
+
+```
+┌───────── 分钟
+│ ┌───────── 小时
+│ │ ┌───────── 日
+│ │ │ ┌───────── 月
+│ │ │ │ ┌───────── 星期
+│ │ │ │ │
+* * * * *
+
+示例：
+0 */4 * * *     每4小时
+0 */6 * * *     每6小时
+0 9,15,21 * * * 每天9点、15点、21点
+```

@@ -780,6 +780,185 @@ def api_get_hot_events_fast():
         return jsonify({'error': str(e)}), 500
 
 
+# ── 定时热点检测 API ─────────────────────────────────────────────
+
+@app.route('/api/hotspot/categories', methods=['GET'])
+def api_get_hotspot_categories():
+    """获取所有热点检测分类配置"""
+    try:
+        import yaml
+        from pathlib import Path
+        config_path = Path(__file__).parent / 'config' / 'hotspot_schedule.yaml'
+        if not config_path.exists():
+            return jsonify({'categories': [], 'error': '配置文件不存在'})
+
+        cfg = yaml.safe_load(config_path.read_text('utf-8')) or {}
+        categories = cfg.get('categories', {})
+        settings = cfg.get('settings', {})
+
+        # 添加最后执行时间
+        from store import get_conn
+        conn = get_conn()
+        for cat_id in categories:
+            try:
+                row = conn.execute("""
+                    SELECT executed_at FROM scheduled_hotspots
+                    WHERE category_id = ? ORDER BY executed_at DESC LIMIT 1
+                """, [cat_id]).fetchone()
+                categories[cat_id]['last_executed'] = row['executed_at'] if row else None
+            except:
+                categories[cat_id]['last_executed'] = None
+        conn.close()
+
+        return jsonify({
+            'categories': [{**v, 'id': k} for k, v in categories.items()],
+            'settings': settings
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hotspot/scheduled', methods=['GET'])
+def api_get_hotspot_scheduled():
+    """获取最新的定时热点检测结果"""
+    category = request.args.get('category')
+    limit = request.args.get('limit', 5, type=int)
+
+    try:
+        from store import get_conn
+        conn = get_conn()
+
+        if category:
+            rows = conn.execute("""
+                SELECT * FROM scheduled_hotspots
+                WHERE category_id = ?
+                ORDER BY executed_at DESC LIMIT ?
+            """, [category, limit]).fetchall()
+        else:
+            # 获取每个分类的最新一条
+            rows = conn.execute("""
+                SELECT * FROM scheduled_hotspots
+                WHERE id IN (
+                    SELECT MAX(id) FROM scheduled_hotspots GROUP BY category_id
+                )
+                ORDER BY executed_at DESC
+            """).fetchall()
+
+        results = []
+        for row in rows:
+            r = dict(row)
+            r['events'] = json.loads(r['events']) if isinstance(r['events'], str) else r['events']
+            results.append(r)
+
+        conn.close()
+        return jsonify({'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hotspot/history', methods=['GET'])
+def api_get_hotspot_history():
+    """获取历史热点记录"""
+    category = request.args.get('category')
+    days = request.args.get('days', 7, type=int)
+    limit = request.args.get('limit', 50, type=int)
+
+    try:
+        from store import get_conn
+        from datetime import datetime, timedelta, timezone
+        TZ_BJ = timezone(timedelta(hours=8))
+
+        conn = get_conn()
+        cutoff = (datetime.now(TZ_BJ) - timedelta(days=days)).isoformat()
+
+        if category:
+            rows = conn.execute("""
+                SELECT * FROM scheduled_hotspots
+                WHERE category_id = ? AND executed_at >= ?
+                ORDER BY executed_at DESC LIMIT ?
+            """, [category, cutoff, limit]).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT * FROM scheduled_hotspots
+                WHERE executed_at >= ?
+                ORDER BY executed_at DESC LIMIT ?
+            """, [cutoff, limit]).fetchall()
+
+        results = []
+        for row in rows:
+            r = dict(row)
+            r['events'] = json.loads(r['events']) if isinstance(r['events'], str) else r['events']
+            results.append(r)
+
+        conn.close()
+        return jsonify({'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hotspot/execute', methods=['POST'])
+def api_execute_hotspot():
+    """手动执行热点检测"""
+    data = request.json or {}
+    category = data.get('category')
+    hours = data.get('hours')
+    max_results = data.get('max_results')
+    keywords = data.get('keywords')
+    provider = data.get('provider')
+
+    if not category:
+        return jsonify({'error': '缺少 category 参数'}), 400
+
+    try:
+        from scheduled_hotspot import run_detection
+        result = run_detection(
+            category,
+            hours=hours,
+            max_results=max_results,
+            keywords=keywords,
+            provider=provider
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hotspot/config/<category_id>', methods=['PUT'])
+def api_update_hotspot_config(category_id):
+    """更新分类配置"""
+    data = request.json or {}
+
+    try:
+        import yaml
+        from pathlib import Path
+        config_path = Path(__file__).parent / 'config' / 'hotspot_schedule.yaml'
+
+        cfg = yaml.safe_load(config_path.read_text('utf-8')) or {}
+        categories = cfg.get('categories', {})
+
+        if category_id not in categories:
+            return jsonify({'error': f'分类不存在: {category_id}'}), 404
+
+        # 更新配置
+        if 'enabled' in data:
+            categories[category_id]['enabled'] = data['enabled']
+        if 'hours' in data:
+            categories[category_id]['hours'] = data['hours']
+        if 'max_results' in data:
+            categories[category_id]['max_results'] = data['max_results']
+        if 'keywords' in data:
+            categories[category_id]['keywords'] = data['keywords']
+        if 'schedule' in data:
+            categories[category_id]['schedule'] = data['schedule']
+
+        cfg['categories'] = categories
+        config_path.write_text(yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False), 'utf-8')
+
+        return jsonify({'ok': True, 'category': categories[category_id]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/intelligence/write', methods=['POST'])
 def api_write_report():
     data = request.json or {}

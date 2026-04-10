@@ -186,6 +186,22 @@ def init_db(conn=None):
         CREATE INDEX IF NOT EXISTS idx_external_articles_time ON external_articles(published);
         CREATE INDEX IF NOT EXISTS idx_external_articles_keyword ON external_articles(keyword_match);
         CREATE INDEX IF NOT EXISTS idx_external_articles_url_hash ON external_articles(url_hash);
+
+        -- 定时热点检测结果表
+        CREATE TABLE IF NOT EXISTS scheduled_hotspots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_id     TEXT NOT NULL,
+            category_name   TEXT NOT NULL,
+            executed_at     TEXT NOT NULL,
+            time_window_hours INTEGER,
+            events          TEXT NOT NULL,
+            event_count     INTEGER DEFAULT 0,
+            article_count   INTEGER DEFAULT 0,
+            keywords_used   TEXT,
+            created_at      TEXT DEFAULT (datetime('now', '+8 hours'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_scheduled_hotspots_category ON scheduled_hotspots(category_id);
+        CREATE INDEX IF NOT EXISTS idx_scheduled_hotspots_executed ON scheduled_hotspots(executed_at);
     """)
 
     if conn is None:

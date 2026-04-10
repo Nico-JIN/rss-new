@@ -23,21 +23,76 @@ llm:
   # 豆包 (火山引擎 Ark) 配置
   volcengine:
     api_key: "7c321d64-5ac0-4776-ac9a-ec61a915a9fa"         # 请填入您的 Ark API Key
-    model: "doubao-seed-2-0-pro-260215"  # 请填入您的 Endpoint ID
-    base_url: "https://ark.cn-beijing.volces.com/api/v3"
+    model: "doubao-seed-2.0-pro"  # 使用最新 seed-2.0-pro
+    base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
+  
+  # Gemini 配置
+  gemini:
+    api_key: "AIzaSyBlpEEJReoSj5jcN2kF0PrGcKidrl3NqkE"         # 请填入您的 Gemini API Key
+    model: "gemini-2.0-flash"                  # 或 gemini-1.5-flash
+    base_url: "https://generativelanguage.googleapis.com" # Google官方OpenAI兼容接口
   
   max_batch: 20          # 每批最多打包的文章数
   temperature: 0.1       # 稳定性参数
   timeout: 120           # API 超时时间 (秒)
 
-# 翻译专用模型配置 (适用于全平台内容翻译)
+# ═══════════════════════════════════════════════════════════════════════════════
+# 翻译/大纲提取专用模型配置
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# 【配置位置说明】
+# 大纲提取使用的模型配置就在下方的 translation_llm 部分
+#
+# 【本地模型选项】
+# provider: "ollama"    → 使用 Ollama（Windows/Linux/Mac 通用）
+#                         需要先安装 Ollama 并下载模型: ollama pull gemma4:e2b
+#                         默认端口: http://localhost:11434
+#
+# provider: "lmstudio"  → 使用 LM Studio（Mac/Windows 推荐）
+#                         需要先安装 LM Studio 并启动本地服务
+#                         默认端口: http://localhost:1234
+#
+# provider: "omlx"      → 使用 Omlx（Mac 推荐）
+#                         Mac 上的本地推理工具
+#                         默认端口: http://localhost:8899
+#
+# 【切换本地模型的方法】
+# 修改下方的 provider 和对应的 base_url、model
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
 translation_llm:
   enabled: true
+
+  # ── 本地模型配置 ───────────────────────────────────────────────────────────
+  # 选择 provider: "ollama" / "lmstudio" / "omlx"
   provider: "ollama"
-  api_key: "ollama"
+
+  # Ollama 配置（当前使用）
+  api_key: "ollama"      # Ollama 不需要真实 API Key，填任意值即可
   base_url: "http://127.0.0.1:11434/v1"
-  model: "gemma4:e2b"
-  timeout: 180
+  model: "gemma4:e2b"    # 模型名称，运行 `ollama list` 查看可用模型
+
+  # LM Studio 配置（如需切换，取消注释并修改 provider）
+  # api_key: "lmstudio"
+  # base_url: "http://localhost:1234/v1"
+  # model: ""             # 留空则使用 LM Studio 已加载的模型
+
+  # Omlx 配置（Mac 用户推荐）
+  # api_key: "omlx"
+  # base_url: "http://localhost:8899/v1"
+  # model: ""             # 留空则使用 Omlx 已加载的模型
+
+  # ── 调用参数 ───────────────────────────────────────────────────────────────
+  timeout: 180           # 超时时间（秒），本地模型推理较慢，建议 180+
+  temperature: 0.3       # 温度参数，大纲提取建议 0.3
+
+  # ── 大纲提取专用配置 ───────────────────────────────────────────────────────
+  outline_extraction:
+    batch_size_full: 3       # 完整正文批量大小
+    batch_size_short: 10     # 标题摘要批量大小
+    max_workers: 2           # 并发数（本地 LLM 资源有限，建议 2-3）
+    max_content_length: 3000 # 正文截断长度
 
 topics:
   - name: "中国言论"

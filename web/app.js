@@ -359,6 +359,7 @@ function spawnMeteor(feed, item) {
 
     const imageUrl = item.image || '';
     const hasImage = imageUrl && imageUrl.length > 0;
+    const articleUrl = item.article_url || '';
 
     launchCard.innerHTML = `
         ${hasImage
@@ -367,7 +368,7 @@ function spawnMeteor(feed, item) {
         }
         <div class="launch-card-content">
             <div class="launch-card-source">${escHtml(item.feed_name || feed.name || '未知频段')}</div>
-            <div class="launch-card-title">${escHtml(item.article_title)}</div>
+            <div class="launch-card-title">${articleUrl ? `<a href="${escHtml(articleUrl)}" target="_blank" style="color:inherit;text-decoration:none;">${escHtml(item.article_title)}</a>` : escHtml(item.article_title)}</div>
             <div class="launch-card-time">${item.article_time || ''}</div>
         </div>
     `;
@@ -389,7 +390,7 @@ function spawnMeteor(feed, item) {
         }
         <div class="feed-item-content">
             <div class="fi-meta"><span class="fi-source">${escHtml(item.feed_name || feed.name || '未知频段')}</span> <span class="fi-time">${item.article_time || ''}</span></div>
-            <div class="fi-title">${escHtml(item.article_title)}</div>
+            <div class="fi-title">${articleUrl ? `<a href="${escHtml(articleUrl)}" target="_blank" style="color:inherit;text-decoration:none;">${escHtml(item.article_title)}</a>` : escHtml(item.article_title)}</div>
         </div>
     `;
     list.prepend(div);
@@ -1155,41 +1156,31 @@ async function loadFeeds() {
 
         const countries = Object.keys(grouped).sort();
 
-        container.innerHTML = countries.map(country => `
-            <div class="card" style="margin-bottom: 15px;">
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                    <span style="font-size: 20px;">${getCountryFlag(country)}</span>
-                    <h4 style="margin:0; font-size: 14px; font-weight:600;">${escHtml(country)}</h4>
-                    <span style="font-size: 11px; color: var(--text-secondary);">${grouped[country].length} 个源</span>
+        // 紧凑的单容器布局
+        container.innerHTML = `
+            <div class="feeds-panel">
+                <div class="feeds-header">
+                    ${countries.map(country => `
+                        <div class="country-section">
+                            <div class="country-label">
+                                <span class="flag">${getCountryFlag(country)}</span>
+                                <span class="name">${escHtml(country)}</span>
+                                <span class="count">${grouped[country].length}</span>
+                            </div>
+                            <div class="feed-items">
+                                ${grouped[country].map(f => `
+                                    <div class="feed-item" onclick="editFeed(${f._idx})">
+                                        <span class="feed-platform">${escHtml(f.platform)}</span>
+                                        <span class="feed-group">${escHtml(f.media_group || '-')}</span>
+                                        <button class="feed-delete" onclick="event.stopPropagation(); deleteFeed(${f._idx})">×</button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
                 </div>
-                <table class="data-table" style="font-size: 13px;">
-                    <thead>
-                        <tr>
-                            <th style="width:40px">#</th>
-                            <th>平台</th>
-                            <th>媒体组</th>
-                            <th style="width:80px">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${grouped[country].map((f) => `
-                            <tr>
-                                <td>${f._idx}</td>
-                                <td>
-                                    <div style="font-weight:600">${escHtml(f.platform)}</div>
-                                    <div style="font-size:10px;color:var(--text-secondary);margin-top:2px;word-break:break-all;max-width:300px;">${escHtml(f.url)}</div>
-                                </td>
-                                <td>${escHtml(f.media_group || '-')}</td>
-                                <td>
-                                    <button class="btn btn-sm btn-secondary" onclick="editFeed(${f._idx})" title="编辑">✏️</button>
-                                    <button class="btn btn-sm btn-danger" onclick="deleteFeed(${f._idx})" title="删除">🗑️</button>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
             </div>
-        `).join('');
+        `;
     }
 
     // 设置间隔按钮
@@ -1238,34 +1229,21 @@ async function loadExternalSources() {
         let html = '';
         for (const [category, items] of Object.entries(grouped)) {
             html += `
-                <div class="card" style="margin-bottom: 15px;">
-                    <div style="display:flex; align-items:center; gap:10px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(99,102,241,0.2);">
-                        <span style="font-size: 20px;">${categoryIcons[category] || '📡'}</span>
-                        <h4 style="margin:0; font-size: 14px; font-weight:600; color: #6366f1;">${category}</h4>
-                        <span style="font-size: 11px; color: var(--text-secondary);">${items.length} 个源</span>
+                <div class="feeds-panel" style="margin-bottom: 12px;">
+                    <div style="display:flex; align-items:center; gap:10px; padding: 12px 16px; background: rgba(99,102,241,0.08); border-bottom: 1px solid rgba(99,102,241,0.15);">
+                        <span style="font-size: 16px;">${categoryIcons[category] || '📡'}</span>
+                        <span style="font-size: 13px; font-weight:600; color: #6366f1;">${category}</span>
+                        <span style="font-size: 10px; color: var(--text-secondary); margin-left: auto;">${items.length} 个源</span>
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px;">
+                    <div class="external-grid" style="padding: 12px;">
                         ${items.map(src => `
-                            <div class="external-source-card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                    <span style="font-weight: 600; font-size: 14px;">${escHtml(src.name)}</span>
-                                    <label class="toggle" style="transform: scale(0.75);">
-                                        <input type="checkbox" ${src.enabled ? 'checked' : ''} onchange="toggleExternalSource('${escHtml(src.name)}', this.checked)">
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </div>
-                                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">${escHtml(src.description || '')}</div>
-                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                    <span style="font-size: 10px; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
-                                        类型: ${src.type}
-                                    </span>
-                                    <span style="font-size: 10px; color: ${src.enabled ? '#22c55e' : 'var(--text-secondary)'}; background: ${src.enabled ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)'}; padding: 2px 6px; border-radius: 4px;">
-                                        ${src.enabled ? '已启用' : '已禁用'}
-                                    </span>
-                                </div>
-                                <button class="btn btn-sm btn-secondary" style="margin-top: 8px; font-size: 11px;" onclick="editExternalSource('${escHtml(src.name)}')">
-                                    ⚙️ 配置
-                                </button>
+                            <div class="external-card">
+                                <span class="icon">${src.enabled ? '✅' : '⚪'}</span>
+                                <span class="name">${escHtml(src.name)}</span>
+                                <label class="toggle toggle-wrap">
+                                    <input type="checkbox" ${src.enabled ? 'checked' : ''} onchange="toggleExternalSource('${escHtml(src.name)}', this.checked)">
+                                    <span class="toggle-slider"></span>
+                                </label>
                             </div>
                         `).join('')}
                     </div>
@@ -1936,12 +1914,14 @@ async function loadHotEvents() {
         container.innerHTML = events.map((e, idx) => {
             const itemsHtml = e.items.slice(0, 8).map(i => {
                 const isChecked = selectedArticles.has(String(i.id));
+                const itemUrl = i.url || '';
+                const titleText = `[${escHtml(i.platform)}] ${escHtml(i.title)}`;
                 return `
                     <div class="he-details-item" title="${escHtml(i.title)}">
-                        <input type="checkbox" class="he-item-check" 
-                               ${isChecked ? 'checked' : ''} 
+                        <input type="checkbox" class="he-item-check"
+                               ${isChecked ? 'checked' : ''}
                                onclick="event.stopPropagation(); toggleHotItem('${idx}', '${i.id}', this.checked)">
-                        <span class="he-item-title">[${escHtml(i.platform)}] ${escHtml(i.title)}</span>
+                        <span class="he-item-title">${itemUrl ? `<a href="${escHtml(itemUrl)}" target="_blank" style="color:inherit;text-decoration:none;" onclick="event.stopPropagation();">${titleText}</a>` : titleText}</span>
                     </div>
                 `;
             }).join('');
