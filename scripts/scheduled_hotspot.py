@@ -3,16 +3,18 @@
 定时热点检测引擎
 
 功能：
-1. 支持5类热点检测（中国、美国、日本、中东、港澳台）
+1. 支持6类热点检测（中国、美国、日本、中东、港澳台、亚洲其他）
 2. 支持定时执行和手动触发
 3. 支持历史记录存储
 4. 提供CLI和API两种调用方式
+5. 支持 v2（旧版叙事提取）和 v3（新版 event_key 流水线）两种模式
 
 使用方式：
     python scripts/scheduled_hotspot.py --help
     python scripts/scheduled_hotspot.py --list
     python scripts/scheduled_hotspot.py --run china_related
     python scripts/scheduled_hotspot.py --run-all
+    python scripts/scheduled_hotspot.py --run-all --pipeline v3
     python scripts/scheduled_hotspot.py --daemon
 """
 
@@ -100,6 +102,8 @@ def init_hotspot_table(conn=None):
                 event_count INTEGER DEFAULT 0,
                 article_count INTEGER DEFAULT 0,
                 keywords_used TEXT,
+                duration_seconds INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'success',
                 created_at TEXT DEFAULT (datetime('now', '+8 hours'))
             )
         """)
@@ -112,8 +116,24 @@ def init_hotspot_table(conn=None):
 
 
 def save_hotspot_result(category_id: str, category_name: str, events: list,
-                         hours: int, keywords: list, conn=None) -> int:
-    """保存热点检测结果"""
+                         hours: int, keywords: list, conn=None,
+                         duration_seconds: int = 0, status: str = 'success') -> int:
+    """
+    保存热点检测结果
+
+    Args:
+        category_id: 分类ID
+        category_name: 分类名称
+        events: 热点事件列表
+        hours: 时间窗口
+        keywords: 使用的关键词
+        conn: 数据库连接
+        duration_seconds: 执行耗时（秒）
+        status: 执行状态（success/failed/partial）
+
+    Returns:
+        记录ID
+    """
     own_conn = conn is None
     if own_conn:
         conn = get_conn()
@@ -126,8 +146,8 @@ def save_hotspot_result(category_id: str, category_name: str, events: list,
 
         conn.execute("""
             INSERT INTO scheduled_hotspots
-            (category_id, category_name, executed_at, time_window_hours, events, event_count, article_count, keywords_used)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (category_id, category_name, executed_at, time_window_hours, events, event_count, article_count, keywords_used, duration_seconds, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [
             category_id,
             category_name,
@@ -136,7 +156,9 @@ def save_hotspot_result(category_id: str, category_name: str, events: list,
             json.dumps(events, ensure_ascii=False),
             len(events),
             article_count,
-            json.dumps(keywords, ensure_ascii=False)
+            json.dumps(keywords, ensure_ascii=False),
+            duration_seconds,
+            status
         ])
         conn.commit()
 
@@ -323,7 +345,8 @@ def run_detection(category_id: str, hours: int = None, max_results: int = None,
             }
 
         # ── Step 2: 本地快速聚类 ──────────────────────────────
-        clusters = _cluster_articles(articles, threshold=0.30)
+        threshold = cat_cfg.get('similarity_threshold', 0.30)
+        clusters = _cluster_articles(articles, threshold=threshold)
         significant = [c for c in clusters if len(c['items']) >= 2]
         if not quiet:
             print(f"[Step 2] 聚类完成: {len(clusters)} 个簇, 其中 {len(significant)} 个有 ≥2 篇文章")
@@ -407,6 +430,200 @@ def run_detection(category_id: str, hours: int = None, max_results: int = None,
     finally:
         if own_conn:
             conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 核心检测逻辑（v3 — event_key 流水线模式）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# 分类 ID 映射：旧分类名 → 新分类名
+CATEGORY_ID_MAP = {
+    'china_related': 'foreign_china',
+    'hk_tw_macau': 'greater_china',
+    'asia_neighbors': 'asia_other',
+    # us_news, japan_news, middle_east 保持不变
+}
+
+
+def run_detection_v3(
+    category_id: str,
+    hours: int = 24,
+    max_results: int = 20,
+    provider: str = None,
+    quiet: bool = False
+) -> dict:
+    """
+    执行热点检测 (v3 — event_key 流水线模式)
+
+    新流程：
+    1. 拉取未分析文章
+    2. LLM 提取 event_key 等字段
+    3. 按 event_key 聚合
+    4. 六大分类映射
+
+    Args:
+        category_id: 分类ID（支持旧名称自动映射）
+        hours: 时间窗口
+        max_results: 最大结果数
+        provider: LLM 提供商
+        quiet: 静默模式
+
+    Returns:
+        检测结果
+    """
+    from hotspot_pipeline import (
+        run_pipeline,
+        get_category_hotspots,
+        get_category_name as v3_get_category_name
+    )
+
+    # 记录开始时间
+    start_time = datetime.now(TZ_BJ)
+
+    # 分类 ID 映射
+    mapped_category_id = CATEGORY_ID_MAP.get(category_id, category_id)
+
+    # 获取配置
+    cat_cfg = get_category_config(category_id)
+    category_name = cat_cfg.get('name', category_id) if cat_cfg else v3_get_category_name(mapped_category_id)
+    hours = hours or (cat_cfg.get('hours', 24) if cat_cfg else 24)
+    max_results = max_results or (cat_cfg.get('max_results', 20) if cat_cfg else 20)
+
+    if provider is None:
+        cfg = load_config()
+        provider = cfg.get('settings', {}).get('narrative_provider', 'volcengine')
+
+    if not quiet:
+        print(f"\n{'='*60}", flush=True)
+        print(f"[检测 v3] {category_name}", flush=True)
+        print(f"  时间窗口: {hours}h", flush=True)
+        print(f"  模式: event_key 流水线", flush=True)
+        print(f"  LLM Provider: {provider}", flush=True)
+        print('='*60, flush=True)
+
+    # 执行流水线
+    result = run_pipeline(
+        hours=hours,
+        provider=provider,
+        max_results=max_results,
+        quiet=quiet
+    )
+
+    # 提取指定分类的热点
+    hotspots = result.get('categories', {}).get(mapped_category_id, [])
+
+    # 转换为旧格式（兼容现有前端）
+    # 注意：确保返回的数据格式与数据库存储格式一致
+    events = []
+    for h in hotspots[:max_results]:
+        event = {
+            'title': h.get('representative_title', ''),
+            'representative_title': h.get('representative_title', ''),  # 添加此字段保持一致
+            'score': h.get('score', 0),
+            'count': h.get('article_count', 0),
+            'media_count': len(h.get('sources', [])),
+            's_tier_count': h.get('s_tier_count', 0),  # 添加此字段
+            'platforms': h.get('sources', []),
+            'sources': h.get('sources', []),  # 添加此字段
+            'tags': h.get('entities', []),
+            'entities': h.get('entities', []),  # 添加此字段
+            'latest_published': h.get('latest_published', ''),  # 添加时间字段
+            'is_china_related': mapped_category_id == 'foreign_china',
+            'article_ids': [a.get('id') for a in h.get('articles', []) if a.get('id')],
+            'article_count': h.get('article_count', 0),
+            'items': h.get('articles', []),
+        }
+        events.append(event)
+
+    # 计算执行耗时
+    end_time = datetime.now(TZ_BJ)
+    duration_seconds = int((end_time - start_time).total_seconds())
+
+    # 确定状态
+    status = 'success' if events else 'partial'
+
+    return {
+        'category_id': category_id,
+        'category_name': category_name,
+        'executed_at': result.get('stats', {}).get('executed_at', ''),
+        'time_window_hours': hours,
+        'keywords_used': [],
+        'event_count': len(events),
+        'events': events,
+        'stats': result.get('stats', {}),
+        'duration_seconds': duration_seconds,
+        'status': status,
+    }
+
+
+def run_all_categories_v3(
+    hours: int = 24,
+    provider: str = None,
+    max_results: int = 20,
+    quiet: bool = False
+) -> list:
+    """
+    执行所有分类的 v3 检测
+
+    Args:
+        hours: 时间窗口
+        provider: LLM 提供商
+        max_results: 每分类最大结果数
+        quiet: 静默模式
+
+    Returns:
+        各分类结果列表
+    """
+    from hotspot_pipeline import run_pipeline
+
+    if provider is None:
+        cfg = load_config()
+        provider = cfg.get('settings', {}).get('narrative_provider', 'volcengine')
+
+    # 执行一次完整流水线
+    result = run_pipeline(
+        hours=hours,
+        provider=provider,
+        max_results=max_results,
+        quiet=quiet
+    )
+
+    # 转换为旧格式
+    results = []
+    for old_cat_id in ['china_related', 'us_news', 'japan_news', 'middle_east', 'hk_tw_macau', 'asia_neighbors']:
+        mapped_cat_id = CATEGORY_ID_MAP.get(old_cat_id, old_cat_id)
+        hotspots = result.get('categories', {}).get(mapped_cat_id, [])
+
+        cat_cfg = get_category_config(old_cat_id)
+        category_name = cat_cfg.get('name', old_cat_id) if cat_cfg else mapped_cat_id
+
+        events = []
+        for h in hotspots[:max_results]:
+            event = {
+                'title': h.get('representative_title', ''),
+                'score': h.get('score', 0),
+                'count': h.get('article_count', 0),
+                'media_count': len(h.get('sources', [])),
+                'platforms': h.get('sources', []),
+                'tags': h.get('entities', []),
+                'is_china_related': mapped_cat_id == 'foreign_china',
+                'article_ids': [a.get('id') for a in h.get('articles', []) if a.get('id')],
+                'article_count': h.get('article_count', 0),
+                'items': h.get('articles', []),
+            }
+            events.append(event)
+
+        results.append({
+            'category_id': old_cat_id,
+            'category_name': category_name,
+            'executed_at': result.get('stats', {}).get('executed_at', ''),
+            'time_window_hours': hours,
+            'keywords_used': [],
+            'event_count': len(events),
+            'events': events,
+        })
+
+    return results
 
 
 def run_all_categories(conn=None) -> list:
@@ -590,6 +807,9 @@ def main():
     parser.add_argument('--hours', type=int, default=24, help='时间窗口（小时），默认24')
     parser.add_argument('--max', type=int, help='最大结果数')
     parser.add_argument('--keywords', type=str, help='关键字（逗号分隔）')
+    parser.add_argument('--pipeline', type=str, choices=['v2', 'v3'], default='v3',
+                        help='流水线版本: v2(旧版叙事提取) 或 v3(新版event_key)，默认v3')
+    parser.add_argument('--provider', type=str, help='指定 LLM 提供商')
 
     # 输出格式
     parser.add_argument('--json', action='store_true', help='JSON格式输出')
@@ -621,14 +841,25 @@ def main():
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return
 
-        keywords = args.keywords.split(',') if args.keywords else None
-        result = run_detection(
-            args.type,
-            hours=args.hours,
-            max_results=args.max,
-            keywords=keywords,
-            quiet=True  # 静默模式，只输出JSON
-        )
+        # 根据 pipeline 版本选择检测函数
+        if args.pipeline == 'v3':
+            result = run_detection_v3(
+                args.type,
+                hours=args.hours,
+                max_results=args.max,
+                provider=args.provider,
+                quiet=True
+            )
+        else:
+            keywords = args.keywords.split(',') if args.keywords else None
+            result = run_detection(
+                args.type,
+                hours=args.hours,
+                max_results=args.max,
+                keywords=keywords,
+                provider=args.provider,
+                quiet=True
+            )
 
         # 强制 JSON 输出
         output = json.dumps(result, ensure_ascii=False, indent=2)
@@ -658,13 +889,22 @@ def main():
 
     # 执行指定分类
     if args.run:
-        keywords = args.keywords.split(',') if args.keywords else None
-        result = run_detection(
-            args.run,
-            hours=args.hours,
-            max_results=args.max,
-            keywords=keywords
-        )
+        if args.pipeline == 'v3':
+            result = run_detection_v3(
+                args.run,
+                hours=args.hours,
+                max_results=args.max,
+                provider=args.provider
+            )
+        else:
+            keywords = args.keywords.split(',') if args.keywords else None
+            result = run_detection(
+                args.run,
+                hours=args.hours,
+                max_results=args.max,
+                keywords=keywords,
+                provider=args.provider
+            )
 
         if args.json:
             # Windows终端编码处理
@@ -680,7 +920,14 @@ def main():
 
     # 执行所有分类
     if args.run_all:
-        results = run_all_categories()
+        if args.pipeline == 'v3':
+            results = run_all_categories_v3(
+                hours=args.hours,
+                provider=args.provider,
+                max_results=args.max
+            )
+        else:
+            results = run_all_categories()
         if args.json:
             print(json.dumps(results, ensure_ascii=False, indent=2))
         else:
