@@ -323,6 +323,8 @@ def api_update_feed(idx):
         feeds[idx]['scrape_url'] = data['scrape_url'].strip()
     if 'fetch_jina' in data:
         feeds[idx]['fetch_jina'] = bool(data['fetch_jina'])
+    if 'is_s_tier' in data:
+        feeds[idx]['is_s_tier'] = bool(data['is_s_tier'])
     save_feeds_config(cfg)
     return jsonify({'ok': True})
 
@@ -785,6 +787,13 @@ def api_get_hot_events_fast():
 @app.route('/api/hotspot/categories', methods=['GET'])
 def api_get_hotspot_categories():
     """获取所有热点检测分类配置"""
+    # category_id 映射：配置文件旧名称 → 数据库新名称
+    CATEGORY_MAP = {
+        'china_related': 'foreign_china',
+        'hk_tw_macau': 'greater_china',
+        'asia_neighbors': 'asia_other',
+    }
+
     try:
         import yaml
         from pathlib import Path
@@ -796,15 +805,17 @@ def api_get_hotspot_categories():
         categories = cfg.get('categories', {})
         settings = cfg.get('settings', {})
 
-        # 添加最后执行时间
+        # 添加最后执行时间（使用映射后的 category_id 查询）
         from store import get_conn
         conn = get_conn()
         for cat_id in categories:
+            # 映射到数据库中的 category_id
+            db_cat_id = CATEGORY_MAP.get(cat_id, cat_id)
             try:
                 row = conn.execute("""
                     SELECT executed_at FROM scheduled_hotspots
                     WHERE category_id = ? ORDER BY executed_at DESC LIMIT 1
-                """, [cat_id]).fetchone()
+                """, [db_cat_id]).fetchone()
                 categories[cat_id]['last_executed'] = row['executed_at'] if row else None
             except:
                 categories[cat_id]['last_executed'] = None
@@ -824,16 +835,29 @@ def api_get_hotspot_scheduled():
     category = request.args.get('category')
     limit = request.args.get('limit', 5, type=int)
 
+    # category_id 映射：前端旧名称 → 数据库新名称
+    CATEGORY_MAP = {
+        'china_related': 'foreign_china',
+        'hk_tw_macau': 'greater_china',
+        'asia_neighbors': 'asia_other',
+        # us_news, japan_news, middle_east 保持不变
+    }
+
+    # 映射 category_id
+    db_category = CATEGORY_MAP.get(category, category)
+    print(f"[API] 查询: category={category} → db_category={db_category}", flush=True)
+
     try:
         from store import get_conn
         conn = get_conn()
 
-        if category:
+        if db_category:
             rows = conn.execute("""
                 SELECT * FROM scheduled_hotspots
                 WHERE category_id = ?
                 ORDER BY executed_at DESC LIMIT ?
-            """, [category, limit]).fetchall()
+            """, [db_category, limit]).fetchall()
+            print(f"[API] 查询到 {len(rows)} 条记录", flush=True)
         else:
             # 获取每个分类的最新一条
             rows = conn.execute("""
@@ -896,6 +920,91 @@ def api_get_hotspot_history():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/hotspot/execution-logs', methods=['GET'])
+def api_hotspot_execution_logs():
+    """
+    获取热点检测执行记录（用于前端进度展示）
+
+    Query params:
+        days: 查询最近N天的记录（默认7天）
+        category_id: 可选，筛选指定分类
+    """
+    days = request.args.get('days', 7, type=int)
+    category_id = request.args.get('category_id', None)
+
+    try:
+        conn = get_conn()
+
+        cutoff = (datetime.now(TZ_BJ) - timedelta(days=days)).isoformat()
+
+        if category_id:
+            rows = conn.execute("""
+                SELECT id, category_id, category_name, executed_at, duration_seconds, status, event_count, article_count
+                FROM scheduled_hotspots
+                WHERE category_id = ? AND executed_at >= ?
+                ORDER BY executed_at DESC
+            """, [category_id, cutoff]).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT id, category_id, category_name, executed_at, duration_seconds, status, event_count, article_count
+                FROM scheduled_hotspots
+                WHERE executed_at >= ?
+                ORDER BY executed_at DESC
+            """, [cutoff]).fetchall()
+
+        logs = []
+        for r in rows:
+            log = {
+                'id': r['id'],
+                'category_id': r['category_id'],
+                'category_name': r['category_name'],
+                'executed_at': r['executed_at'][:16] if r['executed_at'] else '',
+                'duration_seconds': r['duration_seconds'] or 0,
+                'status': r['status'] or 'success',
+                'event_count': r['event_count'] or 0,
+                'article_count': r['article_count'] or 0,
+            }
+            logs.append(log)
+
+        # 计算统计
+        total_executions = len(logs)
+        success_count = sum(1 for l in logs if l['status'] == 'success')
+        success_rate = success_count / total_executions if total_executions > 0 else 1.0
+        avg_duration = sum(l['duration_seconds'] for l in logs) / total_executions if total_executions > 0 else 0
+
+        # 获取下次执行时间（从配置解析）
+        schedule_cfg_path = BASE / "config" / "hotspot_schedule.yaml"
+        next_schedule = None
+        if schedule_cfg_path.exists():
+            schedule_cfg = yaml.safe_load(schedule_cfg_path.read_text('utf-8')) or {}
+            categories = schedule_cfg.get('categories', {})
+            for cat_id, cat_cfg in categories.items():
+                if not cat_cfg.get('enabled', True):
+                    continue
+                schedule_expr = cat_cfg.get('schedule', '')
+                if schedule_expr:
+                    next_schedule = {
+                        'category_id': cat_id,
+                        'category_name': cat_cfg.get('name', cat_id),
+                        'schedule': schedule_expr,
+                    }
+                    break
+
+        conn.close()
+
+        return jsonify({
+            'logs': logs[:20],
+            'stats': {
+                'total_executions': total_executions,
+                'success_rate': round(success_rate, 2),
+                'avg_duration': round(avg_duration, 1),
+            },
+            'next_schedule': next_schedule,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/hotspot/execute', methods=['POST'])
 def api_execute_hotspot():
     """手动执行热点检测"""
@@ -905,20 +1014,63 @@ def api_execute_hotspot():
     max_results = data.get('max_results')
     keywords = data.get('keywords')
     provider = data.get('provider')
+    pipeline = data.get('pipeline', 'v3')  # 默认使用 v3 新流水线
 
     if not category:
         return jsonify({'error': '缺少 category 参数'}), 400
 
     try:
-        from scheduled_hotspot import run_detection
-        result = run_detection(
-            category,
-            hours=hours,
-            max_results=max_results,
-            keywords=keywords,
-            provider=provider
-        )
+        from scheduled_hotspot import run_detection, run_detection_v3
+
+        print(f"[API] 执行热点检测: category={category}, pipeline={pipeline}, provider={provider}", flush=True)
+
+        # 根据 pipeline 版本选择检测函数
+        if pipeline == 'v3':
+            result = run_detection_v3(
+                category,
+                hours=hours,
+                max_results=max_results,
+                provider=provider,
+                quiet=False  # 输出进度
+            )
+        else:
+            result = run_detection(
+                category,
+                hours=hours,
+                max_results=max_results,
+                keywords=keywords,
+                provider=provider,
+                quiet=False  # 输出进度
+            )
+        print(f"[API] 完成: {result.get('event_count', 0)} 个热点", flush=True)
         return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hotspot/execute-all', methods=['POST'])
+def api_execute_hotspot_all():
+    """批量执行所有分类的热点检测（v3 流水线）"""
+    data = request.json or {}
+    hours = data.get('hours')
+    provider = data.get('provider')
+    max_results = data.get('max_results', 20)
+    pipeline = data.get('pipeline', 'v3')
+
+    try:
+        from scheduled_hotspot import run_all_categories, run_all_categories_v3
+
+        if pipeline == 'v3':
+            results = run_all_categories_v3(
+                hours=hours,
+                provider=provider,
+                max_results=max_results,
+                quiet=True
+            )
+        else:
+            results = run_all_categories(conn=None)
+
+        return jsonify({'results': results, 'count': len(results)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -950,6 +1102,11 @@ def api_update_hotspot_config(category_id):
             categories[category_id]['keywords'] = data['keywords']
         if 'schedule' in data:
             categories[category_id]['schedule'] = data['schedule']
+        # 新增：阈值和起报数配置
+        if 'similarity_threshold' in data:
+            categories[category_id]['similarity_threshold'] = float(data['similarity_threshold'])
+        if 'min_articles' in data:
+            categories[category_id]['min_articles'] = int(data['min_articles'])
 
         cfg['categories'] = categories
         config_path.write_text(yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False), 'utf-8')
@@ -957,6 +1114,41 @@ def api_update_hotspot_config(category_id):
         return jsonify({'ok': True, 'category': categories[category_id]})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hotspot/s-tier', methods=['GET'])
+def api_get_s_tier_media():
+    """获取S级媒体列表"""
+    cfg = load_feeds_config()
+    feeds = cfg.get('feeds', [])
+
+    s_tier_list = []
+    for i, f in enumerate(feeds):
+        is_s = f.get('is_s_tier', False)
+        s_tier_list.append({
+            'index': i,
+            'platform': f.get('platform', ''),
+            'media_group': f.get('media_group', ''),
+            'is_s_tier': is_s
+        })
+
+    return jsonify({'feeds': s_tier_list})
+
+
+@app.route('/api/hotspot/s-tier/<int:idx>', methods=['PUT'])
+def api_update_s_tier(idx):
+    """更新S级媒体标记"""
+    data = request.json or {}
+    cfg = load_feeds_config()
+    feeds = cfg.get('feeds', [])
+
+    if idx < 0 or idx >= len(feeds):
+        return jsonify({'error': '索引越界'}), 404
+
+    feeds[idx]['is_s_tier'] = bool(data.get('is_s_tier', False))
+    save_feeds_config(cfg)
+
+    return jsonify({'ok': True, 'feed': feeds[idx]})
 
 
 @app.route('/api/intelligence/write', methods=['POST'])
