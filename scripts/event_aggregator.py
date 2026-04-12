@@ -56,7 +56,8 @@ class HotspotEvent:
             "representative_title": self.representative_title,
             "articles": [
                 {"id": a.get("id"), "title": a.get("title", ""), "url": a.get("url", ""),
-                 "platform": a.get("platform", ""), "published": a.get("published", "")}
+                 "platform": a.get("platform", ""), "published": a.get("published", ""),
+                 "image": a.get("image", "")}
                 for a in self.articles[:10]  # 只保留前10篇详情
             ],
             "sources": self.sources,
@@ -420,7 +421,7 @@ def get_analyzed_articles(hours: int = 24, conn=None) -> list[dict]:
     rows = conn.execute("""
         SELECT id, url_hash, title, url, summary, platform, media_group,
                published, primary_country, event_key, related_countries,
-               entities, llm_confidence, is_political
+               entities, llm_confidence, is_political, image
         FROM articles
         WHERE published >= ?
           AND event_key IS NOT NULL

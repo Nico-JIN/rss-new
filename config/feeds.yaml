@@ -498,6 +498,7 @@ feeds:
 - city: 台湾
   country: 中国台湾
   fetch_jina: false
+  is_s_tier: true
   media_group: 台湾媒体
   platform: 中央通讯社（CNA）
   scrape_url: ''

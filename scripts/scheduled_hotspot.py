@@ -401,6 +401,7 @@ def run_detection_v3(
                     'platform': a.get('platform', ''),
                     'published': a.get('published', ''),
                     'summary': a.get('summary', '')[:200],
+                    'image': a.get('image', ''),
                 }
                 for a in e.get('items', [])
             ]
@@ -508,6 +509,7 @@ def run_all_categories_v3(
                         'platform': a.get('platform', ''),
                         'published': a.get('published', ''),
                         'summary': a.get('summary', '')[:200],
+                        'image': a.get('image', ''),
                     }
                     for a in e.get('items', [])
                 ]
@@ -769,6 +771,7 @@ def main():
                         'url': a.get('url', ''),
                         'platform': a.get('platform', ''),
                         'published': a.get('published', ''),
+                        'image': a.get('image', ''),
                     }
                     # 摘要（如果有）
                     if a.get('summary'):

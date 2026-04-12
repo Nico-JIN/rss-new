@@ -1026,38 +1026,25 @@ def api_execute_hotspot():
     """手动执行热点检测"""
     data = request.json or {}
     category = data.get('category')
-    hours = data.get('hours')
-    max_results = data.get('max_results')
-    keywords = data.get('keywords')
+    hours = data.get('hours', 24)
+    max_results = data.get('max_results', 20)
     provider = data.get('provider')
-    pipeline = data.get('pipeline', 'v3')  # 默认使用 v3 新流水线
 
     if not category:
         return jsonify({'error': '缺少 category 参数'}), 400
 
     try:
-        from scheduled_hotspot import run_detection, run_detection_v3
+        from scheduled_hotspot import run_detection_v3
 
-        print(f"[API] 执行热点检测: category={category}, pipeline={pipeline}, provider={provider}", flush=True)
+        print(f"[API] 执行热点检测: category={category}, hours={hours}", flush=True)
 
-        # 根据 pipeline 版本选择检测函数
-        if pipeline == 'v3':
-            result = run_detection_v3(
-                category,
-                hours=hours,
-                max_results=max_results,
-                provider=provider,
-                quiet=False  # 输出进度
-            )
-        else:
-            result = run_detection(
-                category,
-                hours=hours,
-                max_results=max_results,
-                keywords=keywords,
-                provider=provider,
-                quiet=False  # 输出进度
-            )
+        result = run_detection_v3(
+            category,
+            hours=hours,
+            max_results=max_results,
+            provider=provider,
+            quiet=False
+        )
         print(f"[API] 完成: {result.get('event_count', 0)} 个热点", flush=True)
         return jsonify(result)
     except Exception as e:
@@ -1068,23 +1055,19 @@ def api_execute_hotspot():
 def api_execute_hotspot_all():
     """批量执行所有分类的热点检测（v3 流水线）"""
     data = request.json or {}
-    hours = data.get('hours')
+    hours = data.get('hours', 24)
     provider = data.get('provider')
     max_results = data.get('max_results', 20)
-    pipeline = data.get('pipeline', 'v3')
 
     try:
-        from scheduled_hotspot import run_all_categories, run_all_categories_v3
+        from scheduled_hotspot import run_all_categories_v3
 
-        if pipeline == 'v3':
-            results = run_all_categories_v3(
-                hours=hours,
-                provider=provider,
-                max_results=max_results,
-                quiet=True
-            )
-        else:
-            results = run_all_categories(conn=None)
+        results = run_all_categories_v3(
+            hours=hours,
+            provider=provider,
+            max_results=max_results,
+            quiet=True
+        )
 
         return jsonify({'results': results, 'count': len(results)})
     except Exception as e:
