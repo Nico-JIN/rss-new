@@ -89,6 +89,7 @@ feeds:
 - city: 新加坡
   country: 新加坡
   fetch_jina: true
+  is_s_tier: false
   media_group: 联合早报
   platform: 联合早报|中国新闻
   scrape_url: https://www.zaobao.com.sg/news/china
@@ -97,12 +98,17 @@ feeds:
   url: https://rss.app/feeds/fKGzBfhuydHw3geo.xml
 - city: 华盛顿
   country: 美国
+  fetch_jina: false
+  is_s_tier: true
   media_group: PBS
   platform: PBS|美国政治
+  scrape_url: ''
+  time_only: false
   timeout: 30
   url: https://rss.app/feeds/tR6OOiFleWnfeWvJ.xml
 - city: 北京
   country: 英国
+  is_s_tier: true
   media_group: 路透社
   platform: 路透社|China
   timeout: 30
@@ -110,6 +116,7 @@ feeds:
 - city: 伦敦
   country: 英国
   fetch_jina: false
+  is_s_tier: true
   media_group: 路透社
   platform: 路透社|US
   scrape_url: ''
@@ -118,20 +125,26 @@ feeds:
   url: https://rss.app/feeds/3SzXJwOJT9A9HLic.xml
 - city: 伦敦
   country: 英国
+  is_s_tier: false
   media_group: 路透社
   platform: 路透社|x.com
   timeout: 30
   url: https://rss.app/feeds/pxSbEqhWbTfVocb4.xml
 - city: 东京
   country: 英国
+  is_s_tier: true
   media_group: 路透社
   platform: 路透社|Japan
   timeout: 30
   url: https://rss.app/feeds/cCw9aLOr3IJQImEl.xml
 - city: 北京
   country: 美国
+  fetch_jina: false
+  is_s_tier: true
   media_group: 纽约时报
   platform: 纽约时报|China
+  scrape_url: ''
+  time_only: false
   timeout: 30
   url: https://rss.app/feeds/vO1vKL4xXqrKIWab.xml
 - city: 纽约
@@ -172,22 +185,32 @@ feeds:
   url: https://rss.app/feeds/6MgtxEEQL3RAsMlL.xml
 - city: 华盛顿
   country: 美国
+  fetch_jina: false
+  is_s_tier: true
   media_group: 美国众议院
   platform: 美国众议院
+  scrape_url: ''
+  time_only: true
   timeout: 30
   url: https://rss.app/feeds/8gETqnSSE4IFWMuZ.xml
 - city: 东京
   country: 日本
   fetch_jina: false
+  is_s_tier: true
   media_group: NHK
   platform: NHK（日本放送协会）
   scrape_url: https://www3.nhk.or.jp/nhkworld/zh/news/
+  time_only: false
   timeout: 30
   url: https://www3.nhk.or.jp/nhkworld/zh/news/
 - city: 东京
   country: 日本
+  fetch_jina: false
+  is_s_tier: true
   media_group: 共同社
   platform: 共同社
+  scrape_url: ''
+  time_only: false
   timeout: 30
   url: https://rss.app/feeds/O4AiW7fxDN6C6H5D.xml
 - city: 伦敦
@@ -210,8 +233,12 @@ feeds:
   url: https://rss.app/feeds/9hfOqIWOIRYGxl9M.xml
 - city: 首尔
   country: 韩国
+  fetch_jina: false
+  is_s_tier: true
   media_group: 韩联社
   platform: 韩联社
+  scrape_url: ''
+  time_only: false
   timeout: 30
   url: https://rss.app/feeds/YNFZbio3L63ri2yv.xml
 - city: 莫斯科
@@ -225,19 +252,28 @@ feeds:
   url: https://rss.app/feeds/2s52rzRgdnH3g2j8.xml
 - city: 纽约
   country: 美国
+  fetch_jina: false
+  is_s_tier: true
   media_group: 纽约时报
   platform: 纽约时报
+  scrape_url: ''
+  time_only: false
   timeout: 30
   url: https://rss.app/feeds/EdaqV6KSPoxu0eya.xml
 - city: 纽约
   country: 美国
+  fetch_jina: false
+  is_s_tier: true
   media_group: 彭博社
   platform: 彭博社
+  scrape_url: ''
+  time_only: false
   timeout: 30
   url: https://rss.app/feeds/KeSi7yXakSMmBsZu.xml
 - city: 东京
   country: 日本
   fetch_jina: false
+  is_s_tier: true
   media_group: 日经中文网
   platform: 日经中文网
   scrape_url: ''
@@ -246,6 +282,7 @@ feeds:
   url: https://rss.app/feeds/k3QuxKgJEBSRF4Fw.xml
 - city: 香港
   country: 中国香港
+  is_s_tier: false
   media_group: SCMP
   platform: 南华早报
   timeout: 30
@@ -274,6 +311,7 @@ feeds:
 - city: 纽约
   country: 美国
   fetch_jina: false
+  is_s_tier: true
   media_group: 美联社
   platform: 美联社
   scrape_url: ''
@@ -337,6 +375,7 @@ feeds:
 - city: 香港
   country: 美国
   fetch_jina: false
+  is_s_tier: true
   media_group: 彭博社
   platform: 彭博社|亚洲
   scrape_url: ''
@@ -355,6 +394,7 @@ feeds:
 - city: 华盛顿
   country: 美国
   fetch_jina: false
+  is_s_tier: true
   media_group: 美国国防部
   platform: 美国国防部
   scrape_url: ''
@@ -364,6 +404,7 @@ feeds:
 - city: ''
   country: 美国
   fetch_jina: false
+  is_s_tier: true
   media_group: 美联社
   platform: 美联社|NEWS
   scrape_url: ''
@@ -373,6 +414,7 @@ feeds:
 - city: ''
   country: 美国
   fetch_jina: false
+  is_s_tier: false
   media_group: 美联社
   platform: 美联社|X.COM
   scrape_url: ''
@@ -418,6 +460,7 @@ feeds:
 - city: 东京
   country: 日本
   fetch_jina: false
+  is_s_tier: true
   media_group: 外务省
   platform: 日本|外务省
   scrape_url: ''
@@ -427,6 +470,7 @@ feeds:
 - city: 东京
   country: 日本
   fetch_jina: false
+  is_s_tier: true
   media_group: 日本
   platform: 产经新闻|Sankei Shimbun
   scrape_url: ''

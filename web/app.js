@@ -1342,6 +1342,7 @@ function openFeedModal(idx) {
             document.getElementById('feedTimeout').value = f.timeout || 30;
             document.getElementById('feedTimeOnly').checked = !!f.time_only;
             document.getElementById('feedFetchJina').checked = !!f.fetch_jina;
+            document.getElementById('feedIsSTier').checked = !!f.is_s_tier;
         });
     } else {
         document.getElementById('feedUrl').value = '';
@@ -1353,6 +1354,7 @@ function openFeedModal(idx) {
         document.getElementById('feedTimeout').value = 30;
         document.getElementById('feedTimeOnly').checked = false;
         document.getElementById('feedFetchJina').checked = false;
+        document.getElementById('feedIsSTier').checked = false;
     }
     modal.classList.add('active');
 }
@@ -1374,6 +1376,7 @@ document.getElementById('modalSave').onclick = async () => {
         timeout: parseInt(document.getElementById('feedTimeout').value) || 30,
         time_only: document.getElementById('feedTimeOnly').checked,
         fetch_jina: document.getElementById('feedFetchJina').checked,
+        is_s_tier: document.getElementById('feedIsSTier').checked,
     };
 
     if (idx >= 0) {
@@ -1937,7 +1940,10 @@ async function loadHotEvents() {
                         <span>📰 ${e.platforms.length} 媒体 / ${e.count} 篇</span>
                     </div>
                     <div class="he-sources" style="font-size:11px; color:var(--text-secondary); margin-top:6px; line-height:1.4;">
-                        ${escHtml((e.all_platforms || e.platforms).slice(0, 6).join('、'))}
+                        ${(e.all_platforms || e.platforms).slice(0, 6).map(p => {
+                            const isSTier = (e.s_tier_sources || []).includes(p);
+                            return isSTier ? `<span style="color:var(--warning); font-weight:700;">★${escHtml(p)}</span>` : escHtml(p);
+                        }).join('、')}
                     </div>
                     <div class="he-details-list">
                         ${itemsHtml}

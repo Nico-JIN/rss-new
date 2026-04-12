@@ -32,8 +32,48 @@ python scripts/api_cli.py hotspot --hours 24
 
 ### 1. 全量获取 `feed`
 
+获取指定时间段的全部新闻（RSS + 外部源合并去重）。
+
 ```bash
+# 完整格式
 python scripts/api_cli.py feed --hours 6 --limit 200
+
+# Agent 精简模式（推荐）
+python scripts/api_cli.py feed --hours 2 --simple
+python scripts/api_cli.py feed --hours 6 --limit 50 --simple
+```
+
+**精简输出格式**（`--simple`）：
+```json
+{
+  "count": 53,
+  "articles": [
+    {
+      "title": "伊朗伊斯兰堡会谈首席谈判代表...",
+      "url": "https://x.com/AP/status/...",
+      "platform": "美联社|X.COM",
+      "published": "2026-04-12T17:26:05+08:00"
+    }
+  ]
+}
+```
+
+**字段说明**：
+| 字段 | 说明 |
+|------|------|
+| `count` | 文章总数 |
+| `articles[].title` | 文章标题 |
+| `articles[].url` | 原文链接 |
+| `articles[].platform` | 平台/媒体名称 |
+| `articles[].published` | 发布时间（ISO格式） |
+
+**Agent 使用示例**：
+```bash
+# 获取近2小时增量新闻
+python scripts/api_cli.py feed --hours 2 --simple
+
+# 获取近6小时新闻（限制50条）
+python scripts/api_cli.py feed --hours 6 --limit 50 --simple
 ```
 
 ### 2. 关键字搜索 `search`
@@ -61,14 +101,51 @@ python scripts/api_cli.py hotspot --hours 24 --max 10
 python scripts/api_cli.py hotspot --hours 12 --keyword "国际"
 ```
 
-### 4. 深度研究 `research`
+### 4. 定时热点检测 `scheduled-hotspot`（Agent推荐）
+
+按类别和时间窗口获取热点，**返回纯净JSON格式**。
+
+```bash
+# 按类别获取热点（24小时）
+python scripts/api_cli.py scheduled-hotspot --category us_news --hours 24
+python scripts/api_cli.py scheduled-hotspot --category china_related --hours 24
+python scripts/api_cli.py scheduled-hotspot --category japan_news --hours 24
+python scripts/api_cli.py scheduled-hotspot --category middle_east --hours 24
+python scripts/api_cli.py scheduled-hotspot --category hk_tw_macau --hours 24
+python scripts/api_cli.py scheduled-hotspot --category asia_neighbors --hours 24
+
+# 自定义时间窗口
+python scripts/api_cli.py scheduled-hotspot --category us_news --hours 6
+python scripts/api_cli.py scheduled-hotspot --category china_related --hours 12
+
+# 获取所有类别热点
+python scripts/api_cli.py scheduled-hotspot --all --hours 48
+
+# 查看历史执行记录
+python scripts/api_cli.py scheduled-hotspot --history --days 7
+```
+
+**类别ID对照表**：
+| ID | 名称 | 说明 |
+|----|------|------|
+| `international` | 国际热点 | 重大国际事件、多国参与的热点 |
+| `foreign_china` | 外媒报道中国 | 排除中国媒体，仅看外媒视角 |
+| `us_news` | 美国新闻 | 美国内政、外交、军事、经济 |
+| `japan_news` | 日本新闻 | 日本政治、经济、军事、外交 |
+| `middle_east` | 中东新闻 | 中东冲突、石油、外交 |
+| `greater_china` | 港澳台新闻 | 港台政治、两岸关系 |
+| `asia_other` | 亚洲周边国家 | 韩国、朝鲜、东南亚、南亚、中亚 |
+
+> **多归属机制**：同一热点可能同时出现在多个分类。例如"美伊谈判"会同时出现在 `international`、`us_news`、`middle_east`。
+
+### 5. 深度研究 `research`
 
 ```bash
 python scripts/api_cli.py research --keyword "特朗普关税" --hours 72
 python scripts/api_cli.py research --article-ids 100,101,102
 ```
 
-### 5. 价值分析 `value`
+### 6. 价值分析 `value`
 
 ```bash
 python scripts/api_cli.py value --article-id 100
@@ -84,6 +161,7 @@ python scripts/api_cli.py value --article-ids 100,101,102
 | 近N小时新闻 | `feed --hours N` |
 | 搜索某主题 | `search --keyword "主题" --hours 24` |
 | 最近热点 | `hotspot --hours 24` |
+| 按类别获取热点 | `scheduled-hotspot --category us_news --hours 24` |
 | 深度研究 | `research --keyword "主题" --hours 72` |
 | 评估文章 | `value --article-id ID` |
 
@@ -151,42 +229,126 @@ python scripts/hotspot_detector.py --hours 24 --json
 
 ---
 
-## 定时热点检测（6大分类）
+## 定时热点检测（7大分类）
 
-自动检测6类新闻热点，支持定时执行和手动触发。**所有接口返回 JSON 格式**。
+自动检测7类新闻热点，支持定时执行和手动触发。**所有接口返回 JSON 格式**。
 
 ### 分类列表
 
 | ID | 名称 | 说明 |
 |----|------|------|
-| `china_related` | 外媒报道中国 | 排除中国媒体，仅看外媒视角 |
+| `international` | 国际热点 | 重大国际事件、多国参与的热点 |
+| `foreign_china` | 外媒报道中国 | 排除中国媒体，仅看外媒视角 |
 | `us_news` | 美国新闻 | 美国内政、外交、军事、经济 |
 | `japan_news` | 日本新闻 | 日本政治、经济、军事、外交 |
 | `middle_east` | 中东新闻 | 中东冲突、石油、外交 |
-| `hk_tw_macau` | 港澳台新闻 | 港台政治、两岸关系 |
-| `asia_neighbors` | 亚洲周边国家 | 韩国、朝鲜、东南亚、南亚、中亚 |
+| `greater_china` | 港澳台新闻 | 港台政治、两岸关系 |
+| `asia_other` | 亚洲周边国家 | 韩国、朝鲜、东南亚、南亚、中亚 |
+
+> **多归属机制**：同一热点可能同时出现在多个分类。例如"美伊谈判"会同时出现在 `international`、`us_news`、`middle_east`。
 
 ### CLI 命令（Agent 推荐）
 
 ```bash
 # 获取指定分类热点（返回 JSON）
-python scripts/scheduled_hotspot.py --type china_related --hours 24 --json
+python scripts/scheduled_hotspot.py --type international --hours 24 --json
+python scripts/scheduled_hotspot.py --type foreign_china --hours 24 --json
 python scripts/scheduled_hotspot.py --type us_news --hours 24 --json
 python scripts/scheduled_hotspot.py --type japan_news --hours 24 --json
 python scripts/scheduled_hotspot.py --type middle_east --hours 24 --json
-python scripts/scheduled_hotspot.py --type hk_tw_macau --hours 24 --json
-python scripts/scheduled_hotspot.py --type asia_neighbors --hours 24 --json
+python scripts/scheduled_hotspot.py --type greater_china --hours 24 --json
+python scripts/scheduled_hotspot.py --type asia_other --hours 24 --json
 
 # 自定义时间窗口
 python scripts/scheduled_hotspot.py --type us_news --hours 6 --json
-python scripts/scheduled_hotspot.py --type china_related --hours 12 --json
+python scripts/scheduled_hotspot.py --type foreign_china --hours 12 --json
 ```
 
-### 返回 JSON 格式
+### Agent 精简模式（推荐）
+
+使用 `--simple` 参数获取精简格式，仅包含热点标题和来源文章，适合 Agent 处理。
+
+```bash
+# 精简模式示例
+python scripts/scheduled_hotspot.py --type international --hours 12 --simple
+python scripts/scheduled_hotspot.py --type foreign_china --hours 24 --simple
+python scripts/scheduled_hotspot.py --type us_news --hours 6 --simple
+```
+
+**精简输出格式**：
+```json
+{
+  "category": "国际热点",
+  "count": 2,
+  "hotspots": [
+    {
+      "title": "美伊谈判未达成协议 特朗普称双方立场差距巨大",
+      "score": 192,
+      "media_count": 15,
+      "articles": [
+        {
+          "title": "美伊谈判未达成协议 特朗普称双方立场差距巨大",
+          "url": "https://news.rthk.hk/rthk/ch/component/k2/1850778.htm",
+          "platform": "香港电台|RTHK",
+          "published": "2026-04-12T12:33:00+08:00",
+          "summary": "美国与伊朗在阿曼举行的间接谈判..."
+        },
+        {
+          "title": "特朗普称美伊谈判未达成协议",
+          "url": "https://www.cnn.com/2026/04/12/world/iran-us-talks",
+          "platform": "CNN|World",
+          "published": "2026-04-12T12:10:26+08:00"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**字段说明**：
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `category` | string | 分类名称 |
+| `count` | int | 热点数量 |
+| `hotspots[].title` | string | 热点标题 |
+| `hotspots[].score` | int | 热度分数（越高越重要） |
+| `hotspots[].media_count` | int | 报道媒体数量 |
+| `hotspots[].articles[]` | array | 来源文章列表 |
+| `articles[].title` | string | 文章标题 |
+| `articles[].url` | string | 原文链接 |
+| `articles[].platform` | string | 平台/媒体名称 |
+| `articles[].published` | string | 发布时间（ISO格式） |
+| `articles[].summary` | string | 摘要（可选，最多300字） |
+
+### Agent 使用示例
+
+**示例 1：获取国际热点（精简格式）**
+```bash
+python scripts/scheduled_hotspot.py --type international --hours 12 --simple
+```
+
+**示例 2：获取美国新闻热点**
+```bash
+python scripts/scheduled_hotspot.py --type us_news --hours 24 --simple
+```
+
+**示例 3：获取外媒报道中国（6小时窗口）**
+```bash
+python scripts/scheduled_hotspot.py --type foreign_china --hours 6 --simple
+```
+
+**示例 4：获取中东新闻热点**
+```bash
+python scripts/scheduled_hotspot.py --type middle_east --hours 12 --simple
+```
+
+### 完整格式（--json）
+
+不使用 `--simple` 时返回完整格式，包含更多元数据：
 
 ```json
 {
-  "category": "us_news",
+  "category_id": "us_news",
   "category_name": "美国新闻",
   "executed_at": "2026-04-10T15:11:13+08:00",
   "time_window_hours": 24,
@@ -196,11 +358,13 @@ python scripts/scheduled_hotspot.py --type china_related --hours 12 --json
       "score": 37.0,
       "count": 4,
       "media_count": 3,
+      "s_tier_count": 2,
       "importance": "high",
       "latest_published": "2026-04-10T14:30:00+08:00",
       "platforms": ["路透社", "纽约时报", "BBC"],
+      "sources": ["路透社", "纽约时报", "BBC"],
       "tags": ["特朗普", "关税", "中国"],
-      "summary": "特朗普宣布对中国商品加征关税...",
+      "entities": ["特朗普", "关税", "中国"],
       "is_china_related": true,
       "items": [
         {
@@ -217,23 +381,6 @@ python scripts/scheduled_hotspot.py --type china_related --hours 12 --json
   "event_count": 6,
   "article_count": 25
 }
-```
-
-### Agent 使用示例
-
-**示例 1：获取美国新闻热点**
-```bash
-python scripts/scheduled_hotspot.py --type us_news --hours 24 --json
-```
-
-**示例 2：获取外媒报道中国（6小时窗口）**
-```bash
-python scripts/scheduled_hotspot.py --type china_related --hours 6 --json
-```
-
-**示例 3：获取亚洲周边国家热点**
-```bash
-python scripts/scheduled_hotspot.py --type asia_neighbors --hours 24 --json
 ```
 
 ### 其他 CLI 命令

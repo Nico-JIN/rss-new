@@ -114,27 +114,73 @@ def is_soft_news(title: str) -> bool:
 # 配置 - 优化参数（避免 API 限流）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-BATCH_SIZE = 100       # 每批处理文章数
-MAX_WORKERS = 1        # 最大并发线程数（单线程大批量更高效）
-RETRY_DELAY = 3        # 重试间隔（秒）
+BATCH_SIZE = 50        # 每批处理文章数
+MAX_WORKERS = 1        # 最大并发线程数
+RETRY_DELAY = 1        # 重试间隔（秒），快速切换模型
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # LLM Prompt
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# 安全版 Prompt - 避免触发内容安全过滤
+# 安全版 Prompt - 优化版，适配小模型
 EXTRACTION_PROMPT = """分析新闻标题，提取结构化信息。
 
 任务：对每条新闻提取以下字段：
 - id: 保持原值
-- country: 主要涉及的国家的ISO代码（US/CN/JP/RU/GB/IL/UA等，国际事件用INTL）
-- event: 用8个字概括事件核心（如"关税政策"、"外长会谈"）
-- tags: 关键词列表（最多3个）
-- political: 是否属于政治情报类新闻（政治、军事、外交、情报、人权、制裁、冲突、选举、政策、言论自由）返回 "true" 或 "false"
+- country: 主要涉及的国家的ISO代码（US/CN/JP/RU/GB/IL/UA/IR等，国际事件用INTL）
+- event: 事件摘要，必须包含关键主体，格式"主体+事件"（如"美伊谈判失败"、"特朗普访华"、"美联储加息"），软新闻填"软新闻"
+- tags: 关键词列表，必须包含主要人物/组织/国家（最多5个）
+- political: 是否属于政治情报类新闻
 
-输出JSON数组，格式如下：
-[{"id":"1","country":"US","event":"关税政策","tags":["贸易","关税"],"political":"true"}]
+【event 字段规则 - 重要！】
+
+必须包含主体，让人一看就知道是谁的事：
+✓ "美伊谈判失败" - 有主体(美伊)，有事件(谈判失败)
+✓ "特朗普宣布制裁" - 有主体(特朗普)，有事件(宣布制裁)
+✓ "日本首相访华" - 有主体(日本首相)，有事件(访华)
+✓ "美联储加息25基点" - 有主体(美联储)，有事件(加息)
+
+✗ "外交谈判失败" - 缺主体，不知道谁和谁
+✗ "谈判未达成协议" - 缺主体
+✗ "访问中国" - 缺主体
+
+【tags 字段规则 - 重要！】
+
+必须提取主要实体，按重要性排序：
+1. 主要人物：特朗普、拜登、习近平、岸田文雄等
+2. 主要国家：美国、中国、日本、伊朗、以色列等
+3. 主要组织：美联储、白宫、克里姆林宫等
+4. 事件关键词：谈判、制裁、加息、冲突等
+
+【political 判断规则】
+
+返回 "true"（政治情报类）：
+- 政治：政府决策、政策法规、选举、政党活动、政治人物言行
+- 军事：战争、冲突、军演、军备、国防
+- 外交：国际关系、外交会谈、制裁、访问、条约
+- 情报：间谍、监控、网络安全、数据泄露
+- 经济政策：贸易战、关税、央行政策、重大经济法规
+
+返回 "false"（软新闻类）：
+- 体育赛事：NBA、足球、篮球、网球、F1、奥运、比赛战报、球员转会
+- 娱乐八卦：明星、电影、综艺、演唱会、颁奖典礼
+- 民生休闲：美食、旅游、天气、健康、时尚
+- 商业营销：产品发布、品牌推广（不含政策影响）
+
+【示例】
+
+输入: {"id":"1","title":"特朗普称与伊朗的间接谈判未达成协议"}
+输出: {"id":"1","country":"US","event":"美伊谈判失败","tags":["特朗普","伊朗","谈判","美国"],"political":"true"}
+
+输入: {"id":"2","title":"日本首相岸田文雄访华会谈"}
+输出: {"id":"2","country":"JP","event":"岸田访华会谈","tags":["岸田文雄","日本","中国","访华"],"political":"true"}
+
+输入: {"id":"3","title":"NBA总决赛湖人队获胜"}
+输出: {"id":"3","country":"US","event":"软新闻","tags":["NBA","湖人队"],"political":"false"}
+
+输出JSON数组，不要输出其他内容：
+[{"id":"1","country":"US","event":"美伊谈判失败","tags":["特朗普","伊朗","谈判"],"political":"true"}]
 
 输入数据："""
 
@@ -214,9 +260,14 @@ def _parse_extraction_response(raw: str, article_count: int) -> list[dict]:
             event_key = item.get("event") or item.get("event_key") or ""
             entities = item.get("tags") or item.get("entities") or []
 
-            # 解析 political 字段（默认 True，保守策略）
-            political_raw = item.get("political", "true")
-            is_political = str(political_raw).lower() in ("true", "1", "yes")
+            # 解析 political 字段（严格解析，默认 True 仅当字段缺失）
+            political_raw = item.get("political")
+            if political_raw is None:
+                # 字段缺失时保守处理：保留（假设是政治新闻）
+                is_political = True
+            else:
+                # 字段存在时严格解析
+                is_political = str(political_raw).lower() in ("true", "1", "yes")
 
             result = {
                 "id": str(item.get("id", "")),
@@ -240,11 +291,42 @@ def _parse_extraction_response(raw: str, article_count: int) -> list[dict]:
 
     except json.JSONDecodeError as e:
         print(f"[WARN] JSON 解析失败: {e}", file=sys.stderr)
-        print(f"[DEBUG] 原始响应前200字符: {raw[:200] if raw else '空'}", file=sys.stderr)
+        # print(f"[DEBUG] 原始响应前200字符: {raw[:200] if raw else '空'}", file=sys.stderr)
         return []
     except Exception as e:
         print(f"[WARN] 解析异常: {e}", file=sys.stderr)
         return []
+
+
+def _apply_rule_based_fallback(articles: list[dict]) -> list[dict]:
+    """
+    当模型连续失败时的规则兜底提取
+    """
+    # 加载置顶词用于强力判定
+    config_path = BASE / "config" / "hotspot_schedule.yaml"
+    pinning_keywords = set()
+    if config_path.exists():
+        try:
+            cfg = yaml.safe_load(config_path.read_text("utf-8")) or {}
+            pinning_keywords = set(cfg.get("settings", {}).get("pinning_keywords", []))
+        except: pass
+    
+    results = []
+    for a in articles:
+        title = a.get("title", "")
+        # 只要包含置顶词，就视为政治情报类
+        is_pinned = any(kw in title for kw in pinning_keywords)
+        
+        results.append({
+            "id": str(a.get("id") or a.get("url_hash", "")),
+            "primary_country": "INTL",
+            "event_key": title[:10] if is_pinned else "",
+            "related_countries": [],
+            "entities": [],
+            "confidence": 0.5,
+            "is_political": is_pinned
+        })
+    return results
 
 
 def extract_batch_sync(articles: list[dict], llm_cfg: dict, provider: str = None) -> list[dict]:
@@ -275,17 +357,19 @@ def extract_batch_sync(articles: list[dict], llm_cfg: dict, provider: str = None
     if provider and cfg.get("llm"):
         cfg = {**cfg, "llm": {**cfg["llm"], "provider": provider}}
 
-    # 调用 LLM
+    # 调用 LLM (带 Fallback 路由)
     raw = _call_llm_api(messages, cfg)
 
     if not raw:
-        print(f"[WARN] LLM 返回为空，批次 {len(articles)} 条", file=sys.stderr)
-        return []
+        print(f"[WARN] 所有 LLM 模型均失效，启用规则兜底", file=sys.stderr)
+        return _apply_rule_based_fallback(articles)
 
     # 解析结果
     results = _parse_extraction_response(raw, len(articles))
 
-    print(f"[INFO] 提取成功: {len(results)}/{len(articles)} 条", file=sys.stderr)
+    if not results:
+        print(f"[WARN] JSON 解析为空，启用规则兜底", file=sys.stderr)
+        return _apply_rule_based_fallback(articles)
 
     return results
 
@@ -454,7 +538,7 @@ def save_extraction_results(results: list[dict], conn=None) -> int:
 
 def get_unanalyzed_articles(hours: int = 24, limit: int = 1000, conn=None) -> list[dict]:
     """
-    获取未分析的文章（已预过滤软新闻）
+    获取未分析的文章（全部交给LLM判断是否为软新闻）
 
     Args:
         hours: 时间窗口
@@ -462,7 +546,7 @@ def get_unanalyzed_articles(hours: int = 24, limit: int = 1000, conn=None) -> li
         conn: 数据库连接
 
     Returns:
-        文章列表（已过滤体育、娱乐、民生类）
+        文章列表
     """
     from store import get_conn, init_db
 
@@ -475,24 +559,15 @@ def get_unanalyzed_articles(hours: int = 24, limit: int = 1000, conn=None) -> li
     start_time = (now - timedelta(hours=hours)).isoformat()
 
     rows = conn.execute("""
-        SELECT id, url_hash, title, summary, platform, media_group, published
+        SELECT id, url_hash, title, summary, platform, media_group, published, media_tier
         FROM articles
         WHERE published >= ?
           AND (event_key IS NULL OR event_key = '')
         ORDER BY published DESC
         LIMIT ?
-    """, [start_time, limit * 2]).fetchall()  # 拉取更多以补偿过滤损失
+    """, [start_time, limit]).fetchall()
 
-    articles = []
-    for r in rows:
-        a = dict(r)
-        # 黑名单预过滤
-        if is_soft_news(a.get("title", "")):
-            continue
-        articles.append(a)
-
-    # 截断到 limit
-    articles = articles[:limit]
+    articles = [dict(r) for r in rows]
 
     if own_conn:
         conn.close()

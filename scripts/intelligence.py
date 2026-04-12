@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from store import get_conn, TZ_BJ, update_article_content
     from llm_tagger import _call_deepseek, load_llm_config, is_english_text, batch_translate_to_chinese, translate_text
+    from event_aggregator import run_aggregation
 except ImportError:
     # 兼容脚本直接运行
     import sys
@@ -24,6 +25,7 @@ except ImportError:
     sys.path.append(str(Path(__file__).parent))
     from store import get_conn, TZ_BJ, update_article_content
     from llm_tagger import _call_deepseek, load_llm_config, is_english_text, batch_translate_to_chinese, translate_text
+    from event_aggregator import run_aggregation
 
 # --- 关键词定义 ---
 CHINA_KEYWORDS = {'中国', '北京', '中方', '外交部', '华', '南海', '台海', '贸易战', '一带一路'}
@@ -437,38 +439,22 @@ def llm_cluster_articles(articles, provider=None):
     return sorted(results, key=lambda x: x['score'], reverse=True)
 
 def generate_hot_events(period='day', provider=None):
-    """获取指定周期的聚合热点"""
-    now = datetime.now(TZ_BJ)
-    if period == 'day':
-        start = (now - timedelta(days=1)).isoformat()
-    elif period == 'week':
-        start = (now - timedelta(days=7)).isoformat()
-    else:
-        start = (now - timedelta(days=30)).isoformat()
-
-    conn = get_conn()
-    articles = conn.execute(
-        "SELECT * FROM articles WHERE published >= ? ORDER BY published DESC",
-        [start]
-    ).fetchall()
-    conn.close()
-
-    # 将 Row 对象转为 dict，并验证每篇文章都有有效 ID
-    article_dicts = []
-    for a in articles:
-        d = dict(a)
-        # 关键修复：跳过没有有效 ID 的文章
-        if d.get('id') is None or d.get('id') == '':
-            print(f"[WARN] 跳过无 ID 文章: {d.get('title', '未知标题')[:50]}")
-            continue
-        article_dicts.append(d)
-
-    print(f"[INFO] 热点分析: 从数据库获取 {len(article_dicts)} 篇有效文章")
-
-    if period == 'day' and len(article_dicts) > 0:
-        return llm_cluster_articles(article_dicts, provider=provider)
-    else:
-        return cluster_articles(article_dicts)
+    """
+    获取指定周期的聚合热点 - 已切换为统一的 event_aggregator 引擎
+    """
+    hours_map = {
+        'day': 24,
+        'week': 168,
+        'month': 720
+    }
+    hours = hours_map.get(period, 24)
+    
+    # 运行统一的聚合引擎
+    # 注意：不再在这里查询数据库，run_aggregation 内部会处理
+    events = run_aggregation(hours=hours, quiet=True)
+    
+    # 转换为前端兼容的 dict 格式
+    return [e.to_dict() for e in events]
 
 def build_analyst_prompt(selected_articles, custom_instruction=None):
     """构建新闻事件深度分析 Prompt"""

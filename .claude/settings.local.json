@@ -26,7 +26,14 @@
       "Bash(curl:*)",
       "Bash(pkill -f \"python.*app.py\")",
       "Bash(killall python:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(sqlite3 data/articles.db \"SELECT title, event_key, is_political FROM articles WHERE published >= datetime\\('now', '-24 hours'\\) AND \\(title LIKE '%足球%' OR title LIKE '%篮球%' OR title LIKE '%体育%' OR title LIKE '%比赛%' OR title LIKE '%冠军%' OR title LIKE '%选手%' OR title LIKE '%联赛%'\\) ORDER BY published DESC LIMIT 20\")",
+      "Bash(sqlite3 data/news.db \"ALTER TABLE articles ADD COLUMN is_political INTEGER DEFAULT 1\")",
+      "Bash(sqlite3 data/news.db \"SELECT COUNT\\(*\\) FROM articles WHERE published >= '2026-04-11T14:00:00+08:00'\")",
+      "Bash(sqlite3 data/news.db \"SELECT COUNT\\(*\\) FROM articles WHERE published >= '2026-04-11 14:00:00'\")",
+      "Bash(sqlite3 data/news.db \"SELECT title, is_political FROM articles WHERE published >= datetime\\('now', '-48 hours'\\) AND \\(title LIKE '%NBA%' OR title LIKE '%篮球%' OR title LIKE '%体育%'\\) ORDER BY published DESC LIMIT 20\")",
+      "Bash(sqlite3 data/news.db \"SELECT id, title, is_political FROM articles WHERE is_political = 1 AND \\(title LIKE '%NBA%' OR title LIKE '%篮球%' OR title LIKE '%足球%' OR title LIKE '%网球%' OR title LIKE '%F1%' OR title LIKE '%奥运%' OR title LIKE '%赛事%' OR title LIKE '%冠军%' OR title LIKE '%选秀%'\\) AND title NOT LIKE '%拜登%' AND title NOT LIKE '%特朗普%' AND title NOT LIKE '%教皇%' AND title NOT LIKE '%腐败%' AND title NOT LIKE '%制裁%' AND title NOT LIKE '%政策%' AND title NOT LIKE '%法规%'\")",
+      "Bash(sqlite3 data/news.db \".tables\")"
     ]
   }
 }

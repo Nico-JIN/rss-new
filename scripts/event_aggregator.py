@@ -119,6 +119,25 @@ def load_s_tier_sources() -> set:
         return set()
 
 
+def load_pinning_keywords() -> set:
+    """
+    从 hotspot_schedule.yaml 加载置顶关键词列表
+
+    Returns:
+        关键词集合
+    """
+    config_path = BASE / "config" / "hotspot_schedule.yaml"
+    if not config_path.exists():
+        return set()
+
+    try:
+        cfg = yaml.safe_load(config_path.read_text("utf-8")) or {}
+        keywords = cfg.get("settings", {}).get("pinning_keywords", [])
+        return set(keywords)
+    except Exception:
+        return set()
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # event_key 归一化
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -150,7 +169,7 @@ def normalize_event_keys(articles: list[dict], threshold: float = 0.75) -> list[
     unique_keys = list(key_freq.keys())
 
     # 构建合并映射
-    merge_map = {}  # key → canonical_key
+    merge_map = {}  # key -> canonical_key
     merged = set()
 
     for i, key_a in enumerate(unique_keys):
@@ -163,7 +182,38 @@ def normalize_event_keys(articles: list[dict], threshold: float = 0.75) -> list[
                 continue
 
             similarity = SequenceMatcher(None, key_a, key_b).ratio()
-            if similarity > threshold:
+
+            # 检查关键词重叠（改进版）
+            # 如果两个 event_key 共享重要关键词（如"美伊"、"谈判"），降低合并阈值
+            keyword_match = False
+
+            # 提取关键词（2-4字的词）
+            def extract_keywords(text, min_len=2, max_len=4):
+                keywords = set()
+                for length in range(max_len, min_len - 1, -1):
+                    for i in range(len(text) - length + 1):
+                        word = text[i:i+length]
+                        # 过滤常见无意义词
+                        if word not in ['报道', '新闻', '表示', '宣布', '称', '说', '据', '指出']:
+                            keywords.add(word)
+                return keywords
+
+            kw_a = extract_keywords(key_a)
+            kw_b = extract_keywords(key_b)
+            common_keywords = kw_a & kw_b
+
+            # 如果共享2个以上关键词，或共享重要关键词，放宽阈值
+            important_keywords = {'美伊', '伊朗', '特朗普', '拜登', '习近平', '谈判', '冲突',
+                                  '制裁', '访华', '会谈', '军演', '导弹', '核', '关税', '贸易'}
+            if len(common_keywords) >= 2 or (common_keywords & important_keywords):
+                keyword_match = True
+
+            # 根据关键词匹配调整阈值
+            effective_threshold = threshold
+            if keyword_match:
+                effective_threshold = 0.5  # 共享关键词，大幅放宽阈值
+
+            if similarity >= effective_threshold:
                 group.append(key_b)
                 merged.add(key_b)
 
@@ -188,7 +238,8 @@ def normalize_event_keys(articles: list[dict], threshold: float = 0.75) -> list[
 def aggregate_hotspots(
     articles: list[dict],
     scoring_cfg: dict = None,
-    s_tier_sources: set = None
+    s_tier_sources: set = None,
+    pinning_keywords: set = None
 ) -> list[HotspotEvent]:
     """
     按 event_key 聚合，计算热度分
@@ -197,6 +248,7 @@ def aggregate_hotspots(
         articles: 文章列表，每项需含 event_key, primary_country, media_group
         scoring_cfg: 评分配置
         s_tier_sources: S 级媒体集合
+        pinning_keywords: 置顶关键词集合（含这些关键词的文章自动入选热点）
 
     Returns:
         热点列表
@@ -209,10 +261,13 @@ def aggregate_hotspots(
         scoring_cfg = load_scoring_config()
     if s_tier_sources is None:
         s_tier_sources = load_s_tier_sources()
+    if pinning_keywords is None:
+        pinning_keywords = load_pinning_keywords()
 
     s_weight = scoring_cfg.get("s_tier_weight", 10)
     n_weight = scoring_cfg.get("normal_weight", 1)
     src_weight = scoring_cfg.get("source_weight", 2)
+    pinning_bonus = scoring_cfg.get("pinning_bonus", 100)  # 置顶关键词加分
 
     # 按 event_key 分组
     groups = defaultdict(list)
@@ -227,13 +282,14 @@ def aggregate_hotspots(
         if not group_articles:
             continue
 
-        # 统计各级媒体
+        # 统计各级媒体和置顶关键词
         s_count = 0
         n_count = 0
         unique_sources = set()
         country_votes = defaultdict(float)
         all_entities = []
         published_times = []
+        has_pinning_keyword = False  # 是否含置顶关键词
 
         for a in group_articles:
             media_group = a.get("media_group", "")
@@ -266,14 +322,27 @@ def aggregate_hotspots(
             if pub:
                 published_times.append(pub)
 
-        # 计算得分
-        score = s_count * s_weight + n_count * n_weight + len(unique_sources) * src_weight
+            # 检查是否含置顶关键词
+            title = a.get("title", "")
+            if title and pinning_keywords:
+                for kw in pinning_keywords:
+                    if kw in title:
+                        has_pinning_keyword = True
+                        break
 
-        # 热点判定
+        # 计算得分（含置顶关键词加分）
+        score = s_count * s_weight + n_count * n_weight + len(unique_sources) * src_weight
+        if has_pinning_keyword:
+            score += pinning_bonus  # 置顶关键词大幅加分
+
+        # 热点判定（需要多家媒体报道才能成为热点）
+        # 条件：
+        # - 至少2家不同媒体报道，或
+        # - 至少3篇文章聚合（同一事件）
+        # 注意：单篇S级媒体报道不足以成为热点，必须有多家报道
         is_hot = (
-            s_count >= 1 or  # S 级直接入选
-            len(group_articles) >= scoring_cfg.get("min_articles", 3) or
-            score >= scoring_cfg.get("min_score", 10)
+            len(unique_sources) >= 2 or  # 至少2家媒体报道
+            len(group_articles) >= scoring_cfg.get("min_articles", 3)  # 至少3篇文章
         )
 
         if not is_hot:

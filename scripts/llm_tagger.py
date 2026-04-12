@@ -79,36 +79,67 @@ def _build_user_prompt(articles: list[dict]) -> str:
 
 
 def _call_llm_api(messages: list[dict], cfg: dict) -> str | None:
-    """通用 LLM 调用路由，支持多模型动态分发"""
+    """通用 LLM 调用路由，支持多模型动态分发与自动故障转移 (Fallback)"""
     llm_cfg = cfg.get('llm', {})
-    provider = llm_cfg.get('provider', 'deepseek')
+    primary_provider = llm_cfg.get('provider', 'gemini')
+
+    # 定义优先级链条：外部API -> 本地Ollama兜底
+    # Gemini -> 豆包 -> DeepSeek -> Ollama(本地)
+    fallback_chain = [primary_provider, 'gemini', 'volcengine', 'deepseek', 'ollama']
+
+    # 去重且保持顺序
+    seen = set()
+    chain = []
+    for p in fallback_chain:
+        if p and p not in seen:
+            chain.append(p)
+            seen.add(p)
+
+    last_error = None
+    for provider in chain:
+        try:
+            result = _execute_llm_call(messages, cfg, provider)
+            if result:
+                return result
+        except Exception as e:
+            last_error = e
+            # 快速切换，不等待
+            print(f"[LLM] {provider} 失败，立即切换下一个模型", file=sys.stderr)
+
+    return None
+
+def _execute_llm_call(messages: list[dict], cfg: dict, provider: str) -> str | None:
+    """内部执行单个 Provider 的调用逻辑"""
+    llm_cfg = cfg.get('llm', {})
 
     # 定义支持 OpenAI 协议的新模型列表
     openai_compat_models = ['qwen3.5-plus', 'glm-5', 'glm-4.7', 'kimi-k2.5', 'MiniMax-M2.5']
 
     if provider == 'volcengine':
         v_cfg = llm_cfg.get('volcengine', {})
+        if not v_cfg: v_cfg = llm_cfg # 兼容层
         return _call_openai_compatible_api(messages, v_cfg)
     elif provider == 'ollama':
-        # Ollama 使用配置中的实际模型名，不使用 provider 作为 model_override
-        return _call_openai_compatible_api(messages, llm_cfg)
+        ollama_cfg = llm_cfg.get('ollama', {})
+        if not ollama_cfg: ollama_cfg = llm_cfg
+        return _call_openai_compatible_api(messages, ollama_cfg)
     elif provider == 'lmstudio':
-        # LM Studio 使用 OpenAI 兼容接口
         return _call_openai_compatible_api(messages, llm_cfg)
     elif provider == 'omlx':
-        # Omlx (Mac 本地推理工具) 使用 OpenAI 兼容接口，端口 8899
         return _call_openai_compatible_api(messages, llm_cfg)
     elif provider == 'gemini':
         gemini_cfg = llm_cfg.get('gemini', {})
+        if not gemini_cfg: gemini_cfg = llm_cfg
         return _call_openai_compatible_api(messages, gemini_cfg)
     elif provider in openai_compat_models:
-        # 如果选择的是新模型，调用聚合器配置
         agg_cfg = llm_cfg.get('writing_aggregator', {})
-        # 兜底：如果聚合器配置不存在，则尝试使用外层 llm_cfg
         final_cfg = agg_cfg if agg_cfg else llm_cfg
         return _call_openai_compatible_api(messages, final_cfg, model_override=provider)
+    elif provider == 'deepseek':
+        # 这里使用显式的 deepseek 配置（如果有的话）
+        return _call_openai_compatible_api(messages, llm_cfg)
     else:
-        # 默认 DeepSeek 或其他透传逻辑
+        # 默认透传逻辑
         return _call_openai_compatible_api(messages, llm_cfg)
 
 def _call_openai_compatible_api(messages: list[dict], llm: dict, model_override: str = None) -> str | None:
@@ -142,18 +173,45 @@ def _call_openai_compatible_api(messages: list[dict], llm: dict, model_override:
 
     # 针对 Kimi 等对 JSON 模式要求极严的模型做动态判定
     # 只有当 prompt 中明确包含 'json' 且任务需要结构化输出时才开启 json_object
+    # 注意：豆包 seed 系列模型不支持 json_object，需排除
     prompt_str = str(messages).lower()
-    if 'json' in prompt_str and ('tagging' in prompt_str or 'events' in prompt_str or '主题' in prompt_str):
+    is_doubao_seed = 'doubao-seed' in model.lower() or 'doubao-1.5' in model.lower()
+    if not is_doubao_seed and 'json' in prompt_str and ('tagging' in prompt_str or 'events' in prompt_str or '主题' in prompt_str):
         payload["response_format"] = {"type": "json_object"}
 
     timeout = llm.get('timeout', 120)
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
-        if resp.status_code == 200:
-            return resp.json()['choices'][0]['message']['content']
-        print(f'[WARN] {model} API 返回 {resp.status_code}: {resp.text[:200]} (URL: {url})', file=sys.stderr)
-    except Exception as e:
-        print(f'[WARN] {model} 请求失败: {e} (URL: {url})', file=sys.stderr)
+    max_retries = 5  # 增加重试次数应对网络不稳定
+    retry_delay = 3  # 增加重试延迟（秒）
+
+    for attempt in range(max_retries):
+        try:
+            # SSL 错误时增加等待时间
+            if attempt > 0:
+                import time
+                time.sleep(retry_delay * attempt)
+            resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            if resp.status_code == 200:
+                return resp.json()['choices'][0]['message']['content']
+
+            # 429 限流错误，等待后重试
+            if resp.status_code == 429:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1) * 2
+                    print(f'[WARN] {model} API 限流 (429)，{wait_time}秒后重试 ({attempt+1}/{max_retries})', file=sys.stderr)
+                    continue
+                else:
+                    print(f'[WARN] {model} API 限流，已达最大重试次数', file=sys.stderr)
+
+            print(f'[WARN] {model} API 返回 {resp.status_code}: {resp.text[:200]} (URL: {url})', file=sys.stderr)
+        except Exception as e:
+            err_str = str(e)
+            # SSL 或代理错误，等待更长时间重试
+            if 'SSL' in err_str or 'proxy' in err_str.lower() or 'EOF' in err_str:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1) * 2
+                    print(f'[WARN] {model} 网络/SSL错误，{wait_time}秒后重试 ({attempt+1}/{max_retries})', file=sys.stderr)
+                    continue
+            print(f'[WARN] {model} 请求失败: {e} (URL: {url})', file=sys.stderr)
     return None
 
 def _call_volcengine_ark(messages: list[dict], llm: dict) -> str | None:
@@ -177,13 +235,35 @@ def _call_volcengine_ark(messages: list[dict], llm: dict) -> str | None:
     }
 
     timeout = llm.get('timeout', 120)
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
-        if resp.status_code == 200:
-            return resp.json()['choices'][0]['message']['content']
-        print(f'[WARN] 豆包 API 返回 {resp.status_code}: {resp.text[:200]}', file=sys.stderr)
-    except Exception as e:
-        print(f'[WARN] 豆包请求失败: {e}', file=sys.stderr)
+    max_retries = 3  # 最大重试次数
+    retry_delay = 2  # 初始重试延迟（秒）
+
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            if resp.status_code == 200:
+                return resp.json()['choices'][0]['message']['content']
+
+            # 429 限流错误，等待后重试
+            if resp.status_code == 429:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1)
+                    print(f'[WARN] 豆包 API 限流 (429)，{wait_time}秒后重试 ({attempt+1}/{max_retries})', file=sys.stderr)
+                    import time
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print(f'[WARN] 豆包 API 限流，已达最大重试次数', file=sys.stderr)
+
+            print(f'[WARN] 豆包 API 返回 {resp.status_code}: {resp.text[:200]}', file=sys.stderr)
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait_time = retry_delay * (attempt + 1)
+                print(f'[WARN] 豆包请求失败: {e}，{wait_time}秒后重试', file=sys.stderr)
+                import time
+                time.sleep(wait_time)
+                continue
+            print(f'[WARN] 豆包请求失败: {e}', file=sys.stderr)
     return None
 
 # 改回原名兼容 intelligence.py

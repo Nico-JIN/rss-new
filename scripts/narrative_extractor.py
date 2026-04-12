@@ -23,6 +23,7 @@ from collections import Counter
 sys.path.insert(0, str(Path(__file__).parent))
 
 from llm_tagger import _call_llm_api, load_llm_config
+from hotspot_detector import load_s_tier_media, _is_s_tier_article
 
 TZ_BJ = timezone(timedelta(hours=8))
 
@@ -48,11 +49,9 @@ CATEGORY_ENTITY_MAP = {
             # 经济科技企业
             '华为', '中兴', '比亚迪', '宁德时代', '大疆', '阿里巴巴', '腾讯', '百度',
             'TikTok', '抖音', '小红书', 'DeepSeek', '深度求索', '小红书',
-            # 国际关系关键词
-            '中美', '中欧', '中俄', '中印', '中朝', '中非', '中美洲',
+            # 国际关系关键词（注意：中美/中日等双边关系词已移至对应国家分类）
             '一带一路', '对华', '制裁中国', '中国制裁', '贸易战', '关税',
-            '南海', '钓鱼岛', '黄岩岛', '台海', '两岸', '港台', '收复台湾', '统一台湾',
-            '中国梦', '两个一百年', '新发展格局', '双循环',
+            '南海', '钓鱼岛', '黄岩岛',
             # 英文关键词
             'China', 'Beijing', 'Xi Jinping', 'Huawei', 'BYD', 'CATL', 'DJI',
             'Chinese', 'PRC', 'CCP', 'PLA',
@@ -61,10 +60,11 @@ CATEGORY_ENTITY_MAP = {
     },
     'us_news': {
         'entities': [
-            # 国家和城市
-            '美国', '华盛顿', '纽约', '洛杉矶', '芝加哥', '旧金山', '硅谷', '西雅图',
-            '波士顿', '休斯顿', '达拉斯', '迈阿密', '亚特兰大', '凤凰城', '丹佛',
-            'USA', 'US', 'America', 'American',
+            # 美国城市（移除通用国家名）
+            '华盛顿', 'Washington', '纽约', 'New York', '洛杉矶', 'Los Angeles',
+            '芝加哥', 'Chicago', '旧金山', 'San Francisco', '硅谷', 'Silicon Valley',
+            '西雅图', 'Seattle', '波士顿', 'Boston', '休斯顿', 'Houston',
+            '达拉斯', 'Dallas', '迈阿密', 'Miami', '亚特兰大', 'Atlanta',
             # 核心领导人（最新 - 特朗普第二任期）
             '特朗普', '川普', 'Trump', '范斯', '万斯', 'Vance', '马斯克', 'Musk',
             '拜登', 'Biden', '哈里斯', '贺锦丽', 'Harris', '奥巴马', 'Obama',
@@ -74,17 +74,17 @@ CATEGORY_ENTITY_MAP = {
             '蓬佩奥', 'Pompeo', '布林肯', 'Blinken', '沙利文', 'Sullivan',
             '耶伦', 'Yellen', '鲍威尔', 'Powell', '雷蒙多', 'Raimondo',
             # 重要机构
-            '白宫', 'White House', '五角大楼', 'Pentagon', '美国国防部', '国防部',
-            '国会', 'Congress', '参议院', 'Senate', '众议院', 'House',
+            '白宫', 'White House', '五角大楼', 'Pentagon', '美国国防部',
+            '美国国会', 'Congress', '参议院', 'Senate', '众议院', 'House',
             '美联储', 'Fed', 'Federal Reserve', 'CIA', 'FBI', 'NSA',
-            '国务院', 'State Department', '国家安全委员会', 'NSC',
+            '美国国务院', 'State Department', '国家安全委员会', 'NSC',
             '美国海军', '美国空军', '美国陆军', '美军', 'US military',
-            '最高法院', 'Supreme Court', '司法部', 'DOJ', '商务部',
+            '最高法院', 'Supreme Court', '美国司法部', 'DOJ', '美国商务部',
             # 美国相关事件和议题
             '美国大选', '美国总统', '总统选举', '中期选举', '国会选举',
-            '美中关系', '中美关系', '美俄关系', '美欧关系', '美日关系',
-            '美国经济', '美元', '通胀', '利率', '加息', '降息',
-            '边境', '移民', '关税', '贸易战', '芯片法案', '通胀削减法案',
+            '中美关系', '美中关系', '美俄关系', '美欧关系', '美日关系',
+            '美国经济', '美元', 'USD', '通胀', '利率', '加息', '降息',
+            '美国边境', '美国移民', '关税', '贸易战', '芯片法案', '通胀削减法案',
             '堕胎', '枪支', '种族', '医保', '社保',
             # 美国科技公司
             '苹果', 'Apple', '微软', 'Microsoft', '谷歌', 'Google', '亚马逊', 'Amazon',
@@ -94,10 +94,10 @@ CATEGORY_ENTITY_MAP = {
     },
     'japan_news': {
         'entities': [
-            # 国家和城市
-            '日本', '东京', 'Tokyo', '大阪', 'Osaka', '京都', 'Kyoto', '横滨', '名古屋',
+            # 日本城市（移除通用国家名）
+            '东京', 'Tokyo', '大阪', 'Osaka', '京都', 'Kyoto', '横滨', '名古屋',
             '冲绳', 'Okinawa', '北海道', 'Hokkaido', '福冈', '广岛', 'Hiroshima', '长崎',
-            '福岛', 'Fukushima', '那霸', 'Japan', 'Japanese', 'JP',
+            '福岛', 'Fukushima', '那霸', 'Naha',
             # 核心领导人（最新 - 石破茂2024年10月上任）
             '石破茂', 'Ishiba', 'Ishiba Shigeru', '岸田', '岸田文雄', 'Kishida',
             '安倍', '安倍晋三', 'Abe', '菅义伟', 'Suga', '野田', '野田佳彦',
@@ -105,19 +105,18 @@ CATEGORY_ENTITY_MAP = {
             '河野太郎', 'Kono', '小泉进次郎', 'Koizumi', '高市早苗', 'Takaichi',
             '日本首相', 'Prime Minister of Japan', '内阁总理大臣',
             # 重要机构
-            '自民党', 'LDP', '民主党', '民主党', '立宪民主党', '公明党',
-            '日本国会', '国会', '众议院', '参议院', '众院', '参院',
+            '自民党', 'LDP', '立宪民主党', '公明党',
+            '日本国会', '众议院', '参议院', '众院', '参院',
             '外务省', '防卫省', '财务省', '经济产业省', '文部科学省',
-            '日银', '日本央行', 'Bank of Japan', 'BOJ', '央行',
+            '日银', '日本央行', 'Bank of Japan', 'BOJ',
             '自卫队', '日本自卫队', 'JSDF', '海上自卫队', '陆上自卫队', '航空自卫队',
             # 日本相关事件和议题
             '日元', 'Yen', 'JPY', '日圆', '日经', '日经指数', 'Nikkei',
-            '核污水', '核废水', '核处理水', '排海', '排放', '福岛核电站',
-            '日中关系', '中日关系', '日美关系', '美日关系', '日韩关系', '日俄关系',
+            '核污水', '核废水', '核处理水', '排海', '福岛核电站',
+            '中日关系', '日中关系', '日美关系', '美日关系', '日韩关系', '日俄关系',
             '日台关系', '台湾与日本', '钓鱼岛', '尖阁诸岛', 'Senkaku',
             '冲绳美军', '美军基地', '驻日美军', '普天间', '嘉手纳',
             '日本经济', '日本GDP', '日本通胀', '日本利率',
-            '日本签证', '日本旅游', '日本签证政策',
         ],
         'description': '日本政治、经济、军事、外交新闻',
     },
@@ -272,76 +271,67 @@ CATEGORY_ENTITY_MAP = {
 
 def _classify_narrative(title: str, entities: list, summary: str = '') -> list:
     """
-    根据叙事的标题、实体和摘要，判断它属于哪些分类
+    根据叙事的标题、实体和摘要，判断它属于哪个分类
+
+    采用**互斥匹配**：只返回优先级最高的一个分类，避免重复。
 
     Returns:
-        匹配的 category_id 列表（一个叙事可能属于多个分类）
+        匹配的 category_id 列表（单元素列表）
     """
     text = f"{title} {' '.join(entities)} {summary}".lower()
-    matched = []
 
-    # 分类优先级：
-    # 1. hk_tw_macau 最高优先（港澳台不被中国大陆吞掉）
-    # 2. asia_neighbors（亚洲周边不被其他分类吞掉）
-    # 3. middle_east（中东冲突明确区分）
-    # 4. japan_news（日本明确区分）
-    # 5. us_news（美国明确区分）
-    # 6. china_related 最后（中国大陆作为兜底）
-    PRIORITY_ORDER = ['hk_tw_macau', 'asia_neighbors', 'middle_east', 'japan_news', 'us_news', 'china_related']
+    # 分类优先级（从高到低）：
+    # 1. hk_tw_macau - 港澳台优先
+    # 2. middle_east - 中东独立
+    # 3. japan_news - 日本独立
+    # 4. us_news - 美国独立
+    # 5. asia_neighbors - 亚洲周边
+    # 6. china_related - 中国大陆（优先级最低，作为兜底）
+    PRIORITY_ORDER = ['hk_tw_macau', 'middle_east', 'japan_news', 'us_news', 'asia_neighbors', 'china_related']
 
+    # 分类匹配逻辑优化：
+    # 1. 只有核心要素（标题）命中，才属于该分类
+    # 2. 如果标题没命中，但实体列表中有重要的匹配项（频率 Top 3），才入选
+    
+    matched_categories = []
+    title_text = title.lower()
+    entity_text = ' '.join(entities[:3]).lower() # 只看前三个主要实体
+    
     for cat_id in PRIORITY_ORDER:
         if cat_id not in CATEGORY_ENTITY_MAP:
             continue
         cat_info = CATEGORY_ENTITY_MAP[cat_id]
-        for entity in cat_info['entities']:
-            if entity.lower() in text:
-                matched.append(cat_id)
-                break  # 一个实体匹配即可确认此分类
+        
+        # 优先匹配标题（强匹配）
+        found_in_title = False
+        for kw in cat_info['entities']:
+            if kw.lower() in title_text:
+                matched_categories.append(cat_id)
+                found_in_title = True
+                break
+        
+        # 如果标题没中，看主要实体
+        if not found_in_title:
+            for kw in cat_info['entities']:
+                if kw.lower() in entity_text:
+                    matched_categories.append(cat_id)
+                    break
+    
+    return list(dict.fromkeys(matched_categories)) if matched_categories else []
 
-    # 如果匹配了 hk_tw_macau，移除 china_related（港澳台新闻不应同时归类为中国大陆）
-    if 'hk_tw_macau' in matched and 'china_related' in matched:
-        matched.remove('china_related')
-
-    # 如果匹配了 asia_neighbors，移除 china_related（亚洲周边不归类为中国）
-    if 'asia_neighbors' in matched and 'china_related' in matched:
-        matched.remove('china_related')
-
-    return matched if matched else ['uncategorized']
+    return ['uncategorized']
 
 
 # ═══════════════════════════════════════════════════════════════════
 # LLM 叙事提取
 # ═══════════════════════════════════════════════════════════════════
 
-NARRATIVE_EXTRACTION_PROMPT = """你是一位资深国际新闻编辑，擅长从大量新闻报道中提炼出正在发生的核心新闻事件。
+NARRATIVE_EXTRACTION_PROMPT = """你是一个提取事实的工具。请将输入的新闻分组总结为 JSON 数组。
 
-以下是按相似度分组后的新闻标题集合。每组代表一个可能的新闻事件。
-请分析这些分组，提炼出真正的重大新闻叙事。
-
-## 要求
-1. 为每个有效的新闻事件生成：
-   - **title**：简洁的中文事件标题（15-25字）
-   - **entities**：核心实体列表（人名、国名、机构名，3-6个）
-   - **summary**：事件概要（30-50字）
-   - **importance**：重要性等级（"high" / "medium" / "low"）
-2. 合并实质上报道同一事件的分组
-3. 忽略不构成重大新闻的琐碎分组（如体育花边、娱乐八卦）
-4. 只保留确实有新闻价值的事件
-
-## 输出格式
-严格输出 JSON 数组，不要有任何其他文字：
-[
-  {
-    "title": "事件标题",
-    "entities": ["实体1", "实体2", "实体3"],
-    "summary": "简要概括",
-    "importance": "high",
-    "group_indices": [0, 3]
-  }
-]
-
-group_indices 是该叙事对应的输入分组序号（从0开始）。
-如果多个分组是同一事件，合并它们的序号。"""
+## 要求:
+1. 每个事件输出: title, entities, summary, importance (high/medium/low), group_indices.
+2. 保持客观中立，仅描述事实。
+3. 必须只输出 JSON 数组，禁止任何解释或对话。"""
 
 
 def _build_cluster_summary(clusters: list, max_clusters: int = 25) -> str:
@@ -411,17 +401,41 @@ def extract_narratives(clusters: list, llm_cfg: dict, provider: str = None,
     if not clusters:
         return []
 
-    # 筛选显著聚类（至少 2 篇文章）
-    significant = [c for c in clusters if len(c['items']) >= 2]
+    # 加载 S 级媒体配置，以支持单篇上报
+    s_tier_info = load_s_tier_media()
+    s_tier_count = 0
+
+    # 筛选显著聚类：至少 2 篇文章 OR 来自 S 级媒体且为单篇
+    significant = []
+    for c in clusters:
+        num_items = len(c['items'])
+        if num_items >= 2:
+            significant.append(c)
+        elif num_items == 1 and s_tier_info:
+            # 检查是否为 S 级媒体
+            if _is_s_tier_article(c['items'][0], s_tier_info):
+                significant.append(c)
+                s_tier_count += 1
+
     if not significant:
         return []
 
-    # 按文章数降序
-    significant.sort(key=lambda c: len(c['items']), reverse=True)
+    # 改进排序逻辑：大幅提升 S 级媒体权重，确保其进入 LLM 处理视野
+    def _cluster_rank(c):
+        count = len(c['items'])
+        # S 级单篇权重设为 20，确保排在大多数普通聚类之前
+        if count == 1 and s_tier_info and _is_s_tier_article(c['items'][0], s_tier_info):
+            return 20
+        return count
+
+    significant.sort(key=_cluster_rank, reverse=True)
     significant = significant[:max_clusters]
 
     if not quiet:
-        print(f"[叙事提取] 输入 {len(significant)} 个显著聚类（共 {sum(len(c['items']) for c in significant)} 篇文章）")
+        msg = f"[叙事提取] 输入 {len(significant)} 个聚类"
+        if s_tier_count > 0:
+            msg += f"（包含 {s_tier_count} 个 S 级单篇报道）"
+        print(msg)
 
     # 构建 LLM 输入
     cluster_text = _build_cluster_summary(significant)
@@ -460,8 +474,14 @@ def extract_narratives(clusters: list, llm_cfg: dict, provider: str = None,
 
     # 解析 JSON
     narratives = _parse_narrative_response(raw, significant, quiet=quiet)
+    
+    # 区分真实 LLM 结果还是降级结果后的日志输出
+    is_fallback = any(n.get('_is_fallback') for n in narratives)
     if not quiet:
-        print(f"[叙事提取] LLM 提炼出 {len(narratives)} 个叙事")
+        if is_fallback:
+            print(f"[叙事提取] 本地降级提炼出 {len(narratives)} 个叙事")
+        else:
+            print(f"[叙事提取] LLM 提炼出 {len(narratives)} 个叙事")
 
     return narratives
 
@@ -612,35 +632,61 @@ def _calc_narrative_score(items: list, importance: str) -> float:
 def _fallback_local_narratives(clusters: list, quiet: bool = False) -> list:
     """
     LLM 调用失败时的降级方案：用本地信息构建叙事
-
-    直接使用聚类代表标题作为叙事标题，提取简单实体
     """
     if not quiet:
         print("[INFO] 使用本地降级模式生成叙事")
+    
+    s_tier_info = load_s_tier_media()
     narratives = []
 
-    sorted_clusters = sorted(clusters, key=lambda c: len(c['items']), reverse=True)
+    # 排序：大幅提升 S 级媒体权重，确保进入降级处理的前 15 名
+    def _rank_fallback(c):
+        count = len(c['items'])
+        if count == 1 and s_tier_info and _is_s_tier_article(c['items'][0], s_tier_info):
+            return 20
+        return count
 
-    for idx, cluster in enumerate(sorted_clusters[:15]):
+    sorted_clusters = sorted(clusters, key=_rank_fallback, reverse=True)
+
+    # 扩大处理容量，确保更多 S 级热点被捕获
+    for idx, cluster in enumerate(sorted_clusters[:30]):
         items = cluster['items']
-        if len(items) < 2:
-            continue
+        
+        # 确定重要性和基础分
+        importance = 'medium'
+        is_s_tier = False
+        if len(items) == 1 and s_tier_info:
+            if _is_s_tier_article(items[0], s_tier_info):
+                importance = 'high'
+                is_s_tier = True
+            else:
+                continue # 非 S 级单篇不进入降级列表
+        elif len(items) >= 3:
+             # 多媒体报道或大量报道视为 High
+             media_count = len(set(a.get('media_group', '') or a.get('platform', '').split('|')[0] for a in items))
+             if media_count >= 3:
+                 importance = 'high'
 
         title = cluster['representative'].get('title', '未知事件')[:60]
         entities = _extract_entities_from_items(items)
         categories = _classify_narrative(title, entities)
-        score = _calc_narrative_score(items, 'medium')
+        
+        # 计算热度分数（如果是 S 级则有加成）
+        score = _calc_narrative_score(items, importance)
+        if is_s_tier and score < 15:
+            score = 15.0 # S 级最低保护分
 
         narratives.append({
             'title': title,
             'entities': entities,
             'summary': '',
-            'importance': 'medium',
+            'importance': importance,
             'categories': categories,
             'cluster_indices': [idx],
             'items': items,
             'count': len(items),
             'score': score,
+            '_is_fallback': True, # 标记为降级结果
         })
 
     narratives.sort(key=lambda x: x['score'], reverse=True)
@@ -649,21 +695,31 @@ def _fallback_local_narratives(clusters: list, quiet: bool = False) -> list:
 
 def _extract_entities_from_items(items: list) -> list:
     """从文章列表中提取高频实体"""
-    all_text = ' '.join(a.get('title', '') for a in items)
-
-    # 合并所有分类的实体词典
+    # 核心优化：按文章数统计命中率
+    found_in_articles = Counter()
+    
+    # 待匹配的所有已知实体
     all_entities = set()
     for cat_info in CATEGORY_ENTITY_MAP.values():
         all_entities.update(cat_info['entities'])
 
-    # 统计命中的实体
-    found = Counter()
-    for entity in all_entities:
-        count = all_text.lower().count(entity.lower())
-        if count > 0:
-            found[entity] = count
-
-    return [e for e, _ in found.most_common(6)]
+    for article in items:
+        title = article.get('title', '').lower()
+        for entity in all_entities:
+            if entity.lower() in title:
+                found_in_articles[entity] += 1
+    
+    # 一个实体要入选，必须在：
+    # 1. 大簇中至少出现在 2 篇文章里
+    # 2. 总比例不低于 15%（或者至少命中 1 篇对于 1-2 篇的小聚类）
+    threshold = 2 if len(items) > 3 else 1
+    
+    top_entities = [
+        e for e, count in found_in_articles.most_common(6)
+        if count >= threshold
+    ]
+    
+    return top_entities
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -292,6 +292,7 @@ def api_add_feed():
         'time_only': bool(data.get('time_only', False)),
         'scrape_url': data.get('scrape_url', '').strip(),
         'fetch_jina': bool(data.get('fetch_jina', False)),
+        'is_s_tier': bool(data.get('is_s_tier', False)),
     }
     cfg.setdefault('feeds', []).append(new_feed)
     save_feeds_config(cfg)
@@ -429,6 +430,43 @@ def api_articles():
         'limit': limit,
         'items': clean_items
     })
+ 
+ 
+# ── API: 热点设置 ─────────────────────────────────────────
+ 
+HOTSPOT_CFG_PATH = BASE / "config" / "hotspot_schedule.yaml"
+ 
+@app.route('/api/hotspot/settings', methods=['GET'])
+def api_get_hotspot_settings():
+    if not HOTSPOT_CFG_PATH.exists():
+        return jsonify({'pinning_keywords': []})
+    try:
+        cfg = yaml.safe_load(HOTSPOT_CFG_PATH.read_text('utf-8'))
+        settings = cfg.get('settings', {})
+        return jsonify({
+            'pinning_keywords': settings.get('pinning_keywords', ['美媒', '日媒', '突发', '领导人'])
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+ 
+@app.route('/api/hotspot/settings', methods=['POST'])
+def api_save_hotspot_settings():
+    data = request.json or {}
+    keywords = data.get('pinning_keywords', [])
+    if not isinstance(keywords, list):
+        return jsonify({'error': 'keywords must be a list'}), 400
+ 
+    try:
+        if not HOTSPOT_CFG_PATH.exists():
+            cfg = {'settings': {}, 'categories': []}
+        else:
+            cfg = yaml.safe_load(HOTSPOT_CFG_PATH.read_text('utf-8'))
+        
+        cfg.setdefault('settings', {})['pinning_keywords'] = keywords
+        HOTSPOT_CFG_PATH.write_text(yaml.dump(cfg, allow_unicode=True, default_flow_style=False), 'utf-8')
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ── API: 统计 ────────────────────────────────────────────
@@ -724,47 +762,25 @@ def api_articles_by_tag():
 @app.route('/api/intelligence/hot', methods=['GET'])
 def api_get_hot_events():
     period = request.args.get('period', 'day')
-    start_time = request.args.get('start')
-    end_time = request.args.get('end')
     provider = request.args.get('provider')
-    use_fast = request.args.get('fast', 'true').lower() == 'true'
 
     try:
-        if use_fast:
-            from hotspot_detector import detect_hot_events
-            
-            # 优先级：若提供了 start，则使用自定义时间范围
-            if start_time:
-                events = detect_hot_events(start_time=start_time, end_time=end_time, max_results=20)
-            else:
-                hours_map = {
-                    'min30': 0.5,
-                    'hour1': 1,
-                    'hour2': 2,
-                    'day': 24,
-                    'week': 168,
-                    'month': 720
-                }
-                hours = hours_map.get(period, 24)
-                events = detect_hot_events(hours=hours, max_results=20)
-
-            # 移除 items 全文以节省带宽，只保留 id
-            for e in events:
-                e['article_ids'] = [a['id'] for a in e.get('items', []) if a.get('id')]
-                if 'items' in e:
-                    for item in e['items']:
-                        if 'content' in item: del item['content']
-                if 'score_details' in e:
-                    del e['score_details']
-        else:
-            # 使用原有 LLM 聚类算法（较慢）
-            events = intelligence.generate_hot_events(period, provider=provider)
-            for e in events:
+        # 统一使用优化后的聚合引擎 (不再区分 fast/llm)
+        events = intelligence.generate_hot_events(period, provider=provider)
+        
+        # 性能优化：在返回 API 前不返回正文全文，节省流量
+        for e in events:
+            if 'items' in e:
                 for item in e['items']:
                     if 'content' in item: del item['content']
+            if 'articles' in e:
+                for item in e['articles']:
+                    if 'content' in item: del item['content']
 
-        return jsonify({'events': events, 'mode': 'fast' if use_fast else 'llm'})
+        return jsonify({'events': events, 'mode': 'unified'})
     except Exception as e:
+        import traceback
+        print(f"[ERROR] API 获取热点失败: {e}\n{traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -2503,11 +2519,22 @@ def main():
     auto_fetch = cfg.get('settings', {}).get('auto_fetch', False)
 
     # 启动后台调度: 由前端配置或者参数决定
-    if not args.no_scheduler and auto_fetch:
-        start_scheduler(interval)
-        print(f'[*] 后台调度已启动，每 {interval} 分钟自动抓取')
+    if not args.no_scheduler:
+        if auto_fetch:
+            start_scheduler(interval)
+            print(f'[*] 后台抓取调度已启动，每 {interval} 分钟自动抓取')
+        else:
+            print('[*] 后台抓取调度未启动 (已设置为不自动抓取)')
+            
+        sys.path.insert(0, str(SCRIPTS))
+        try:
+            from scheduled_hotspot import start_daemon as start_hotspot_daemon
+            start_hotspot_daemon()
+            print('[*] 定时热点检测守护进程已启动')
+        except ImportError as e:
+            print(f'[WARN] 无法加载定时热点检测模块: {e}')
     else:
-        print('[*] 后台调度未自动启动 (已设置为开机不自动抓取)')
+        print('[*] 后台调度未自动启动 (指定了 --no-scheduler)')
 
     print(f'[*] 管理面板: http://localhost:{args.port}')
     app.run(host='0.0.0.0', port=args.port, debug=False)

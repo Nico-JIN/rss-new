@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>热点检测流水线 v3</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --card: #1e293b;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #22d3ee;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 2.5rem clamp(1.5rem, 4vw, 5rem);
+        background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.18), transparent 45%),
+          radial-gradient(circle at 80% 0%, rgba(14, 165, 233, 0.3), transparent 40%), var(--bg);
+        color: var(--text);
+      }
+      header {
+        max-width: 960px;
+        margin: 0 auto 2rem auto;
+        text-align: center;
+      }
+      header h1 {
+        margin-bottom: 0.5rem;
+        font-size: clamp(2rem, 4vw, 2.9rem);
+      }
+      header p {
+        color: var(--muted);
+        margin: 0.2rem 0;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 0.35rem 0.8rem;
+        border-radius: 999px;
+        font-size: 0.92rem;
+        background: rgba(15, 23, 42, 0.6);
+      }
+      section {
+        max-width: 1080px;
+        margin: 0 auto 2.5rem auto;
+      }
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1.25rem;
+      }
+      .card {
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 20px;
+        padding: 1.25rem;
+        box-shadow: 0 15px 40px rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(8px);
+      }
+      .card h3 {
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+      }
+      .card ul {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .flowchart {
+        border-radius: 24px;
+        padding: 1rem;
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+      }
+      .flowchart pre {
+        margin: 0;
+        overflow: auto;
+      }
+      .note-list {
+        display: grid;
+        gap: 0.7rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .note-list li {
+        padding: 0.8rem 1rem;
+        border-radius: 14px;
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px dashed rgba(148, 163, 184, 0.4);
+        line-height: 1.5;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: rgba(15, 23, 42, 0.6);
+        border-radius: 18px;
+        overflow: hidden;
+      }
+      th,
+      td {
+        padding: 0.8rem 1rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        vertical-align: top;
+      }
+      th {
+        text-align: left;
+        color: var(--accent);
+        font-weight: 600;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      code {
+        color: var(--accent);
+      }
+      @media (max-width: 640px) {
+        body {
+          padding: 1.5rem;
+        }
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" defer></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        if (window.mermaid) {
+          window.mermaid.initialize({ startOnLoad: true, theme: "dark" });
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <header>
+      <p class="badge">Hotspot pipeline · v3 · CLI: <code>scripts/hotspot_pipeline.py</code></p>
+      <h1>热点检测全流程（v3）</h1>
+      <p>最后更新：2026-04-12（UTC+08） · 数据源：LLM 抽取 + 规则聚合 + S 级媒体补强</p>
+    </header>
+
+    <section>
+      <div class="card">
+        <h3>核心概览</h3>
+        <p>
+          流水线由 <code>run_pipeline</code> 驱动，串联文章筛选、LLM 批量抽取、event_key 归一、规则聚合、六大分类打标以及重点回填，最终把结果写入
+          <code>scheduled_hotspots</code> 并对外提供 <code>get_category_hotspots</code> / <code>run_all_categories</code> API。配置来自 <code>config/hotspot_schedule.yaml</code>、<code>category_rules.yaml</code> 和
+          <code>feeds.yaml</code>，保证评分、S级媒体及关键字可调。
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <h2>流程图</h2>
+      <div class="flowchart">
+        <div class="mermaid">
+flowchart TD
+    start(["CLI / Scheduler 输入"])
+    config["加载配置 (LLM / Pipeline / Scoring / S源)"]
+    fetch["取未分析文章 (get_unanalyzed_articles)"]
+    hasArticles{存在待抽取?}
+    extract["LLM 批量抽取 (extract_all_sync + 保存)"]
+    aggregate["规则聚合 (normalize_event_keys + run_aggregation)"]
+    classify["分类打标 (classify_all_hotspots)"]
+    backfill["重点回填 (backfill_categories)"]
+    persist["写入 scheduled_hotspots (save_hotspots_to_db)"]
+    stats["生成统计 (run_pipeline stats)"]
+    apis["对外读取 (get_category_hotspots / run_all_categories)"]
+    stier["S级媒体 &amp; 评分配置"]
+
+    start --> config --> fetch --> hasArticles
+    hasArticles -->|是| extract --> aggregate
+    hasArticles -->|否| aggregate
+    aggregate --> classify --> backfill --> persist --> stats --> apis
+    persist -.-> stats
+    stier -.-> aggregate
+    stier -.-> classify
+    stier -.-> backfill
+        </div>
+      </div>
+      <p style="color: var(--muted); margin-top: 0.8rem;">
+        虚线表示依赖配置或可选路径（dry-run 跳过入库，S 级媒体权重同时影响聚合、分类和回填）。
+      </p>
+    </section>
+
+    <section>
+      <h2>阶段拆解</h2>
+      <div class="card-grid">
+        <article class="card">
+          <h3>1. 配置初始化</h3>
+          <ul>
+            <li>读取 LLM、调度、评分与 S 级媒体配置，构建运行上下文。</li>
+            <li>CLI 参数（hours/min_hotspots/provider/dry-run）决定窗口与行为。</li>
+            <li>数据库连接通过 <code>get_conn</code> / <code>init_db</code> 准备。</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>2. 待分析文章 &amp; LLM 抽取</h3>
+          <ul>
+            <li><code>get_unanalyzed_articles</code> 在时间窗口内抓取最多 2000 篇原始稿件。</li>
+            <li>批量送入 <code>extract_all_sync</code>，必要时退回规则引擎。</li>
+            <li>保存结构化事件（event_key、entities、countries 等）供后续使用。</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>3. 规则聚合 &amp; 评分</h3>
+          <ul>
+            <li><code>normalize_event_keys</code> 基于相似度 + pinning keywords 归并事件。</li>
+            <li><code>run_aggregation</code>（含 <code>aggregate_hotspots</code>）融合多家媒体。</li>
+            <li>评分 = S 级权重 + 普通媒体 + 来源覆盖，不足阈值直接过滤。</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>4. 分类打标</h3>
+          <ul>
+            <li><code>classify_all_hotspots</code> 依据 primary/related country 规则映射六大类。</li>
+            <li>foreign_china 排除纯国内媒体，包含“缇庡獟/鏃ュ獟”等关键词可强制匹配 US/JP。</li>
+            <li>同一热点可属于多个分类，内部按 score 降序。</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>5. 重点回填</h3>
+          <ul>
+            <li>对 foreign_china / us_news / japan_news 等重点类执行 <code>backfill_categories</code>。</li>
+            <li>若数量不足 <code>min_hotspots</code>，从历史已分析文章补齐，优先含 pinning keywords。</li>
+            <li>自动赋分并补齐 S 级媒体标签，保障每类 ≥5 条稳定输出。</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>6. 落库 &amp; API</h3>
+          <ul>
+            <li>非 dry-run 情况，将各分类 JSON 写入 <code>scheduled_hotspots</code>。</li>
+            <li><code>stats</code> 记录窗口、来源数与耗时，便于观测。</li>
+            <li><code>get_category_hotspots</code> / <code>run_all_categories</code> 直接复用入库快照。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>数据流 &amp; 关键输入输出</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>输入</th>
+            <th>主要函数</th>
+            <th>输出</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>文章准备</td>
+            <td>窗口内原始稿件 + feed 配置</td>
+            <td><code>get_unanalyzed_articles</code>, <code>load_llm_config</code></td>
+            <td>未结构化文本批次</td>
+          </tr>
+          <tr>
+            <td>LLM 抽取</td>
+            <td>批量文本、规则黑/白名单</td>
+            <td><code>extract_all_sync</code>, <code>save_extraction_results</code></td>
+            <td>包含 event_key / entities 的结构化事件</td>
+          </tr>
+          <tr>
+            <td>聚合 &amp; 评分</td>
+            <td>结构化事件 + S 级媒体列表</td>
+            <td><code>normalize_event_keys</code>, <code>run_aggregation</code>, <code>load_scoring_config</code></td>
+            <td>HotspotEvent（score、articles、sources）</td>
+          </tr>
+          <tr>
+            <td>分类 &amp; 回填</td>
+            <td>HotspotEvent + 历史文章</td>
+            <td><code>classify_all_hotspots</code>, <code>backfill_categories</code></td>
+            <td>每类热点列表（满足最小数量）</td>
+          </tr>
+          <tr>
+            <td>持久化 &amp; API</td>
+            <td>分类结果 + 运行统计</td>
+            <td><code>save_hotspots_to_db</code>, <code>get_category_hotspots</code></td>
+            <td>scheduled_hotspots 表 + JSON stats</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>检查要点</h2>
+      <ul class="note-list">
+        <li><code>category_rules.yaml.scoring</code> 决定 S 级媒体权重与最低得分，调高可强化噪声过滤。</li>
+        <li>回填依赖 <code>get_analyzed_articles</code>，若想覆盖更多重点国家，需保证抽取阶段留存原始文章。</li>
+        <li>dry-run 仅跳过 <code>save_hotspots_to_db</code>，但会返回完整 <code>stats</code> 与分类结果，便于调试。</li>
+        <li>API 层仅读取入库快照；如需实时最新结果，请先运行 CLI / 调度再刷新前端。</li>
+      </ul>
+    </section>
+  </body>
+</html>

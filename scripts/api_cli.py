@@ -177,7 +177,23 @@ def cmd_feed(args):
         'items': unique
     }
 
-    _output_json(output)
+    # Agent 精简模式
+    if getattr(args, 'simple', False):
+        simple_output = {
+            'count': len(unique),
+            'articles': [
+                {
+                    'title': item.get('title', ''),
+                    'url': item.get('url', ''),
+                    'platform': item.get('platform', ''),
+                    'published': item.get('published', ''),
+                }
+                for item in unique
+            ]
+        }
+        _output_json(simple_output)
+    else:
+        _output_json(output)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -345,6 +361,145 @@ def cmd_hotspot(args):
         output['events'].append(e)
 
     _output_json(output)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 接口 3.5: 定时热点检测（按类别获取）
+# ═══════════════════════════════════════════════════════════════════
+
+VALID_SCHEDULED_CATEGORIES = [
+    'china_related',  # 外媒报道中国
+    'us_news',        # 美国新闻
+    'japan_news',     # 日本新闻
+    'middle_east',    # 中东新闻
+    'hk_tw_macau',    # 港澳台新闻
+    'asia_neighbors', # 亚洲其他国家
+]
+
+CATEGORY_NAMES = {
+    'china_related': '外媒报道中国',
+    'us_news': '美国新闻',
+    'japan_news': '日本新闻',
+    'middle_east': '中东新闻',
+    'hk_tw_macau': '港澳台新闻',
+    'asia_neighbors': '亚洲其他国家',
+}
+
+
+def cmd_scheduled_hotspot(args):
+    """定时热点检测 - 按类别获取（供Agent调用）"""
+    from scheduled_hotspot import (
+        run_detection_v3,
+        run_all_categories_v3,
+        get_hotspot_history,
+        init_hotspot_table,
+    )
+
+    now = _now()
+    init_hotspot_table()
+
+    # ── 按类别获取热点 ──
+    if args.category:
+        if args.category not in VALID_SCHEDULED_CATEGORIES:
+            _output_json({
+                'error': f'无效类别: {args.category}',
+                'valid_categories': VALID_SCHEDULED_CATEGORIES,
+                'category_names': CATEGORY_NAMES,
+            })
+            return
+
+        result = run_detection_v3(
+            args.category,
+            hours=args.hours or 24,
+            max_results=args.max or 20,
+            provider=args.provider,
+            quiet=True
+        )
+
+        if not args.json:
+            # 人类可读输出模式
+            print(f"\n{'='*80}")
+            print(f"CATEGORY: {result.get('category_name', 'Hotspot')} // WINDOW: {result.get('time_window_hours', 24)}h // TIME: {result.get('executed_at', '')[:19]}")
+            print(f"{'='*80}\n")
+            
+            if not result.get('events'):
+                print("  [!] No significant hotspots found in this period.")
+                print("  HINT: Try increasing --hours (e.g., --hours 48)")
+            else:
+                for idx, e in enumerate(result['events'][:args.max or 10], 1):
+                    title = e.get('representative_title') or e.get('title', 'Unknown')
+                    score = e.get('score', 0)
+                    count = e.get('article_count', 0)
+                    summary = e.get('items', [{}])[0].get('summary', '') if e.get('items') else ''
+                    
+                    print(f"  {idx:02d}. [{score:3.0f}] {title}")
+                    print(f"      REPORTS: {count} // SOURCES: {', '.join(e.get('sources', [])[:3])}")
+                    if summary:
+                        print(f"      CITATION: {summary[:120]}...")
+                    print("-" * 60)
+            return
+
+        _output_json(result)
+        return
+
+    # ── 获取所有类别热点 ──
+    if args.all:
+        results = run_all_categories_v3(
+            hours=args.hours or 24,
+            provider=args.provider,
+            max_results=args.max or 20,
+            quiet=True
+        )
+
+        _output_json({
+            'api': 'scheduled-hotspot',
+            'query': {
+                'hours': args.hours or 24,
+                'generated_at': now.isoformat(),
+            },
+            'categories': results,
+        })
+        return
+
+    # ── 查看历史执行记录 ──
+    if args.history:
+        records = get_hotspot_history(days=args.days or 7)
+
+        output = []
+        for r in records:
+            output.append({
+                'category': r.get('category_name', ''),
+                'category_id': r.get('category_id', ''),
+                'time': r.get('executed_at', '')[:16] if r.get('executed_at') else '',
+                'events': r.get('event_count', 0),
+                'articles': r.get('article_count', 0),
+                'duration': r.get('duration_seconds', 0),
+                'status': r.get('status', 'success'),
+                'window_hours': r.get('time_window_hours', 24),
+            })
+
+        _output_json({
+            'api': 'scheduled-hotspot-history',
+            'query': {
+                'days': args.days or 7,
+                'generated_at': now.isoformat(),
+            },
+            'count': len(output),
+            'logs': output,
+        })
+        return
+
+    # ── 无参数时显示帮助 ──
+    _output_json({
+        'error': '请指定操作',
+        'usage': {
+            'by_category': 'python scripts/api_cli.py scheduled-hotspot --category us_news --hours 24',
+            'all_categories': 'python scripts/api_cli.py scheduled-hotspot --all --hours 48',
+            'history': 'python scripts/api_cli.py scheduled-hotspot --history --days 7',
+        },
+        'valid_categories': VALID_SCHEDULED_CATEGORIES,
+        'category_names': CATEGORY_NAMES,
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -645,7 +800,8 @@ def _local_value_assessment(art: dict) -> dict:
 def _output_json(data: dict):
     """输出 JSON 到 stdout"""
     sys.stdout.buffer.write(json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8'))
-    print()
+    sys.stdout.buffer.write(b'\n')
+    sys.stdout.buffer.flush()
 
 
 def _error(msg: str):
@@ -667,6 +823,9 @@ def main():
   python scripts/api_cli.py feed --hours 6
   python scripts/api_cli.py search --keyword "中国" --hours 1
   python scripts/api_cli.py hotspot --hours 24 --max 10
+  python scripts/api_cli.py scheduled-hotspot --category us_news --hours 24
+  python scripts/api_cli.py scheduled-hotspot --all --hours 48
+  python scripts/api_cli.py scheduled-hotspot --history --days 7
   python scripts/api_cli.py research --keyword "特朗普" --hours 72
   python scripts/api_cli.py value --article-id 100
         """
@@ -682,6 +841,7 @@ def main():
     p_feed.add_argument('--limit', type=int, default=500, help='最大条数')
     p_feed.add_argument('--with-content', action='store_true', help='包含全文')
     p_feed.add_argument('--no-external', action='store_true', help='禁用外部搜索源')
+    p_feed.add_argument('--simple', action='store_true', help='Agent精简模式（仅标题+链接+时间）')
 
     # search
     p_search = sub.add_parser('search', help='关键字+时间搜索')
@@ -705,6 +865,18 @@ def main():
     p_hotspot.add_argument('--max', type=int, default=15, help='最大热点数')
     p_hotspot.add_argument('--keyword', type=str, help='热点类别关键字 (如: 中国、国际、周边)')
 
+    # scheduled-hotspot (定时热点检测 - Agent专用)
+    p_sched = sub.add_parser('scheduled-hotspot', help='定时热点检测（按类别获取）')
+    p_sched.add_argument('--category', type=str, metavar='CATEGORY',
+                          help=f'类别ID: china_related, us_news, japan_news, middle_east, hk_tw_macau, asia_neighbors')
+    p_sched.add_argument('--all', action='store_true', help='获取所有类别热点')
+    p_sched.add_argument('--history', action='store_true', help='查看历史执行记录')
+    p_sched.add_argument('--hours', type=int, default=24, help='时间窗口（小时），默认24')
+    p_sched.add_argument('--days', type=int, default=7, help='历史记录天数，默认7')
+    p_sched.add_argument('--max', type=int, default=20, help='每类别最大热点数，默认20')
+    p_sched.add_argument('--provider', type=str, help='指定LLM提供商')
+    p_sched.add_argument('--json', action='store_true', help='以 JSON 格式输出结果')
+
     # research
     p_research = sub.add_parser('research', help='深度研究')
     p_research.add_argument('--keyword', type=str, help='研究主题/关键字')
@@ -727,6 +899,7 @@ def main():
         'feed': cmd_feed,
         'search': cmd_search,
         'hotspot': cmd_hotspot,
+        'scheduled-hotspot': cmd_scheduled_hotspot,
         'research': cmd_research,
         'value': cmd_value,
     }

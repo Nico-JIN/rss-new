@@ -3,35 +3,43 @@
 
 llm:
   enabled: true
-  # 提供商选项: 
+  # 提供商选项:
+  # - "gemini": 使用 Google Gemini（优先）
   # - "deepseek": 使用原生 DeepSeek 官方接口
   # - "volcengine": 使用豆包 (Ark) 专用逻辑
-  # - "qwen3.5-plus", "glm-5", "glm-4.7", "kimi-k2.5", "MiniMax-M2.5": 
+  # - "ollama": 使用本地 Ollama（兜底）
+  # - "qwen3.5-plus", "glm-5", "glm-4.7", "kimi-k2.5", "MiniMax-M2.5":
   #   使用下方的 writing_aggregator 聚合配置
-  provider: "volcengine"
-  
+  provider: "gemini"
+
   # 1. 官方 DeepSeek 配置 (已恢复原有设置)
   api_key: "sk-7535891638454e09b8e38f92686c91bb"
   base_url: "https://api.deepseek.com"
   model: "deepseek-chat"
-  
+
   # 2. 新增写作模型聚合配置 (基于博汇接口)
   writing_aggregator:
     api_key: "sk-1YRfBCfqPgWD9TcPDPH1jvc3cUeQQsEcps8jhNvu65JdMyjf"
     base_url: "https://aicoding.bwits.cn:90/v1"
-  
+
   # 豆包 (火山引擎 Ark) 配置
   volcengine:
-    api_key: "7c321d64-5ac0-4776-ac9a-ec61a915a9fa"         # 请填入您的 Ark API Key
-    model: "doubao-seed-2.0-pro"  # 使用最新 seed-2.0-pro
+    api_key: "7c321d64-5ac0-4776-ac9a-ec61a915a9fa"
+    model: "doubao-seed-2.0-pro"
     base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
-  
+
   # Gemini 配置
   gemini:
-    api_key: "AIzaSyBlpEEJReoSj5jcN2kF0PrGcKidrl3NqkE"         # 请填入您的 Gemini API Key
-    model: "gemini-2.0-flash"                  # 或 gemini-1.5-flash
-    base_url: "https://generativelanguage.googleapis.com" # Google官方OpenAI兼容接口
-  
+    api_key: "AIzaSyASkk-TAW-FJ_E3niorcu7Cy0uBvZXG_V8"
+    model: "gemini-2.5-flash"
+    base_url: "https://generativelanguage.googleapis.com"
+
+  # Ollama 本地模型配置（兜底）
+  ollama:
+    api_key: "ollama"
+    base_url: "http://127.0.0.1:11434/v1"
+    model: "gemma4:e2b"
+
   max_batch: 20          # 每批最多打包的文章数
   temperature: 0.1       # 稳定性参数
   timeout: 120           # API 超时时间 (秒)
@@ -64,14 +72,23 @@ llm:
 translation_llm:
   enabled: true
 
-  # ── 本地模型配置 ───────────────────────────────────────────────────────────
+  # ── 云端模型配置（切换到 DeepSeek 加速大纲提取）──────────────────────
+  # 使用 DeepSeek 云端 API，推理速度快，稳定性高
+  provider: "deepseek"
+
+  # DeepSeek 配置
+  api_key: "sk-7535891638454e09b8e38f92686c91bb"
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-chat"
+
+  # ── 本地模型配置（已禁用）────────────────────────────────────────────────
   # 选择 provider: "ollama" / "lmstudio" / "omlx"
-  provider: "ollama"
+  # provider: "ollama"
 
   # Ollama 配置（当前使用）
-  api_key: "ollama"      # Ollama 不需要真实 API Key，填任意值即可
-  base_url: "http://127.0.0.1:11434/v1"
-  model: "gemma4:e2b"    # 模型名称，运行 `ollama list` 查看可用模型
+  # api_key: "ollama"      # Ollama 不需要真实 API Key，填任意值即可
+  # base_url: "http://127.0.0.1:11434/v1"
+  # model: "gemma4:e2b"    # 模型名称，运行 `ollama list` 查看可用模型
 
   # LM Studio 配置（如需切换，取消注释并修改 provider）
   # api_key: "lmstudio"
@@ -91,7 +108,7 @@ translation_llm:
   outline_extraction:
     batch_size_full: 3       # 完整正文批量大小
     batch_size_short: 10     # 标题摘要批量大小
-    max_workers: 2           # 并发数（本地 LLM 资源有限，建议 2-3）
+    max_workers: 6           # 并发数（云端 API 可承受更高并发）
     max_content_length: 3000 # 正文截断长度
 
 topics:

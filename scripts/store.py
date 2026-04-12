@@ -208,6 +208,8 @@ def init_db(conn=None):
             event_count     INTEGER DEFAULT 0,
             article_count   INTEGER DEFAULT 0,
             keywords_used   TEXT,
+            duration_seconds INTEGER DEFAULT 0,
+            status          TEXT DEFAULT 'success',
             created_at      TEXT DEFAULT (datetime('now', '+8 hours'))
         );
         CREATE INDEX IF NOT EXISTS idx_scheduled_hotspots_category ON scheduled_hotspots(category_id);
@@ -216,6 +218,7 @@ def init_db(conn=None):
 
     # 迁移：为现有表添加新字段
     _migrate_hotspot_fields(c)
+    _migrate_scheduled_hotspots_fields(c)
 
     if conn is None:
         c.close()
@@ -250,6 +253,22 @@ def _migrate_hotspot_fields(conn):
     conn.commit()
 
 
+def _migrate_scheduled_hotspots_fields(conn):
+    """迁移函数：为 scheduled_hotspots 表添加新字段"""
+    new_columns = [
+        ("duration_seconds", "INTEGER DEFAULT 0"),
+        ("status", "TEXT DEFAULT 'success'"),
+    ]
+
+    for col_name, col_def in new_columns:
+        try:
+            conn.execute(f"ALTER TABLE scheduled_hotspots ADD COLUMN {col_name} {col_def}")
+        except sqlite3.OperationalError:
+            pass  # 字段已存在，忽略
+
+    conn.commit()
+
+
 # ── 文章操作 ──────────────────────────────────────────────
 
 
@@ -271,16 +290,18 @@ def upsert_articles(items: list[dict], conn=None):
             item.setdefault('content', '')
             item.setdefault('llm_tags', '[]')
             item.setdefault('video', '')
+            item.setdefault('media_tier', 'B')
 
         # 使用 UPSERT 语法：冲突时如果旧记录没图，则更新图片
         sql = """
             INSERT INTO articles
-                (url_hash, title_hash, url, title, platform, media_group, country, published, summary, content, image, video, llm_tags)
+                (url_hash, title_hash, url, title, platform, media_group, country, published, summary, content, image, video, llm_tags, media_tier)
             VALUES
-                (:url_hash, :title_hash, :url, :title, :platform, :media_group, :country, :published, :summary, :content, :image, :video, :llm_tags)
+                (:url_hash, :title_hash, :url, :title, :platform, :media_group, :country, :published, :summary, :content, :image, :video, :llm_tags, :media_tier)
             ON CONFLICT(url_hash) DO UPDATE SET
                 image = CASE WHEN (image IS NULL OR image = '') THEN excluded.image ELSE image END,
-                video = CASE WHEN (video IS NULL OR video = '') THEN excluded.video ELSE video END
+                video = CASE WHEN (video IS NULL OR video = '') THEN excluded.video ELSE video END,
+                media_tier = excluded.media_tier
         """
 
         c.executemany(sql, items)

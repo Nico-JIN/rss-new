@@ -1,3 +1,4 @@
+import sys
 #!/usr/bin/env python3
 """
 统一外部搜索接口层
@@ -331,7 +332,7 @@ class ExternalFetcher(ABC):
 
         filtered = [r for r in results if not r.get('is_china_media', False)]
         if len(filtered) < len(results):
-            print(f"[INFO] 已过滤 {len(results) - len(filtered)} 条中国媒体结果")
+            print(f"[INFO] 已过滤 {len(results) - len(filtered)} 条中国媒体结果", file=sys.stderr)
         return filtered
 
     def normalize_result(self, raw: Dict) -> Dict:
@@ -508,7 +509,7 @@ class BingNewsFetcher(ExternalFetcher):
                 if len(results) >= max_results:
                     break
 
-            print(f"[INFO] Bing News: 找到 {len(results)} 条结果")
+            print(f"[INFO] Bing News: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -572,7 +573,7 @@ class GoogleCustomFetcher(ExternalFetcher):
                 }
                 results.append(self.normalize_result(raw))
 
-            print(f"[INFO] Google Custom: 找到 {len(results)} 条结果")
+            print(f"[INFO] Google Custom: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -625,7 +626,7 @@ class BraveSearchFetcher(ExternalFetcher):
                 }
                 results.append(self.normalize_result(raw))
 
-            print(f"[INFO] Brave: 找到 {len(results)} 条结果")
+            print(f"[INFO] Brave: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -684,9 +685,9 @@ class TavilyFetcher(ExternalFetcher):
             # AI Answer 作为额外信息
             ai_answer = data.get('answer', '')
             if ai_answer:
-                print(f"[INFO] Tavily AI Answer: {ai_answer[:100]}...")
+                print(f"[INFO] Tavily AI Answer: {ai_answer[:100]}...", file=sys.stderr)
 
-            print(f"[INFO] Tavily: 找到 {len(results)} 条结果")
+            print(f"[INFO] Tavily: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -744,7 +745,7 @@ class TwitterFetcher(ExternalFetcher):
                 }
                 results.append(self.normalize_result(raw))
 
-            print(f"[INFO] Twitter: 找到 {len(results)} 条结果")
+            print(f"[INFO] Twitter: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -799,7 +800,7 @@ class YouTubeFetcher(ExternalFetcher):
                 }
                 results.append(self.normalize_result(raw))
 
-            print(f"[INFO] YouTube: 找到 {len(results)} 条结果")
+            print(f"[INFO] YouTube: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -893,7 +894,7 @@ class RedditFetcher(ExternalFetcher):
                 }
                 results.append(self.normalize_result(raw))
 
-            print(f"[INFO] Reddit: 找到 {len(results)} 条结果")
+            print(f"[INFO] Reddit: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -955,7 +956,7 @@ class NewsAPIFetcher(ExternalFetcher):
                 }
                 results.append(self.normalize_result(raw))
 
-            print(f"[INFO] NewsAPI: 找到 {len(results)} 条结果")
+            print(f"[INFO] NewsAPI: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -1026,7 +1027,7 @@ class PerplexityFetcher(ExternalFetcher):
                 }
                 results.append(self.normalize_result(raw))
 
-            print(f"[INFO] Perplexity: 找到 {len(results)} 条结果")
+            print(f"[INFO] Perplexity: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -1097,7 +1098,7 @@ class GoogleNewsFetcher(ExternalFetcher):
                 if len(results) >= max_results:
                     break
 
-            print(f"[INFO] Google News: 找到 {len(results)} 条结果")
+            print(f"[INFO] Google News: 找到 {len(results)} 条结果", file=sys.stderr)
             return results
 
         except Exception as e:
@@ -1206,7 +1207,7 @@ class UnifiedSearcher:
                     )
                     search_query = opt_result.get('optimized_keyword', query)
                     time_filter = opt_result.get('time_filter')
-                    print(f"[INFO] {source}: 关键字优化 '{query}' -> '{search_query}'")
+                    print(f"[INFO] {source}: 关键字优化 '{query}' -> '{search_query}'", file=sys.stderr)
                 except Exception as e:
                     print(f"[WARN] 关键字优化失败: {e}")
 

@@ -1,15 +1,142 @@
-settings:
-  default_hours: 24
-  default_max_results: 15
-  default_min_media: 2
-  retention_days: 30
 categories:
-  china_related:
+  asia_neighbors:
+    description: 亚洲周边国家新闻（不含中日港澳台）
     enabled: true
-    name: 外媒报道中国
-    description: 外国媒体对中国大陆的报道（不含港澳台）
+    exclude_china_media: true
+    hours: 24
     keywords:
-    # 国家和城市
+    - 韩国
+    - Korea
+    - Korean
+    - South Korea
+    - 首尔
+    - Seoul
+    - 尹锡悦
+    - Yoon
+    - 李在明
+    - 朴槿惠
+    - 文在寅
+    - 韩国总统
+    - 韩国国会
+    - 共同民主党
+    - 朝鲜
+    - North Korea
+    - 北韩
+    - 平壤
+    - Pyongyang
+    - 金正恩
+    - Kim Jong-un
+    - 金与正
+    - 朝鲜劳动党
+    - 朝核
+    - 朝鲜核
+    - 导弹试射
+    - 韩朝
+    - 南北韩
+    - 朝韩
+    - 朝鲜半岛
+    - 蒙古
+    - Mongolia
+    - 乌兰巴托
+    - 越南
+    - Vietnam
+    - 河内
+    - 胡志明市
+    - 泰国
+    - Thailand
+    - 曼谷
+    - 泰王
+    - 泰国总理
+    - 菲律宾
+    - Philippines
+    - 马尼拉
+    - 马科斯
+    - 杜特尔特
+    - 仁爱礁
+    - 仙宾礁
+    - 马来西亚
+    - Malaysia
+    - 吉隆坡
+    - 安华
+    - 马哈迪
+    - 印尼
+    - Indonesia
+    - 印度尼西亚
+    - 雅加达
+    - 佐科
+    - 普拉博沃
+    - 新加坡
+    - Singapore
+    - 李显龙
+    - 黄循财
+    - 缅甸
+    - Myanmar
+    - 仰光
+    - 缅甸军方
+    - 昂山素季
+    - 缅北
+    - 柬埔寨
+    - Cambodia
+    - 金边
+    - 洪森
+    - 老挝
+    - Laos
+    - 万象
+    - 印度
+    - India
+    - 新德里
+    - 莫迪
+    - Modi
+    - 印度总理
+    - 印度军方
+    - 印军
+    - 中印
+    - 印中
+    - 印巴
+    - 拉达克
+    - 巴基斯坦
+    - Pakistan
+    - 伊斯兰堡
+    - 克什米尔
+    - 孟加拉
+    - Bangladesh
+    - 达卡
+    - 斯里兰卡
+    - Sri Lanka
+    - 科伦坡
+    - 尼泊尔
+    - Nepal
+    - 加德满都
+    - 不丹
+    - Bhutan
+    - 哈萨克斯坦
+    - Kazakhstan
+    - 乌兹别克斯坦
+    - Uzbekistan
+    - 吉尔吉斯斯坦
+    - Kyrgyzstan
+    - 塔吉克斯坦
+    - Tajikistan
+    - 土库曼斯坦
+    - Turkmenistan
+    - 阿富汗
+    - Afghanistan
+    - 喀布尔
+    - 东盟
+    - ASEAN
+    - 亚太
+    max_results: 20
+    min_articles: 2
+    min_media_count: 2
+    name: 亚洲周边国家
+    schedule: 0 */4 * * *
+    similarity_threshold: 0.3
+  china_related:
+    description: 外国媒体对中国大陆的报道（不含港澳台）
+    enabled: true
+    exclude_china_media: true
+    hours: 24
+    keywords:
     - 中国
     - 北京
     - 上海
@@ -30,7 +157,6 @@ categories:
     - 大陆
     - 中国大陆
     - 内地
-    # 核心领导人（最新）
     - 习近平
     - 李强
     - 王毅
@@ -48,7 +174,6 @@ categories:
     - 王小洪
     - 吴谦
     - 蔡奇
-    # 重要机构
     - 外交部
     - 国务院
     - 中共中央
@@ -59,7 +184,6 @@ categories:
     - 中国政府
     - 中国官方
     - 中国外交部
-    # 经济科技企业
     - 华为
     - 中兴
     - 比亚迪
@@ -72,11 +196,6 @@ categories:
     - 抖音
     - DeepSeek
     - 深度求索
-    # 国际关系关键词
-    - 中美
-    - 中欧
-    - 中俄
-    - 中印
     - 一带一路
     - 对华
     - 制裁中国
@@ -86,7 +205,6 @@ categories:
     - 南海
     - 钓鱼岛
     - 黄岩岛
-    # 英文关键词
     - China
     - Beijing
     - Xi Jinping
@@ -94,131 +212,94 @@ categories:
     - BYD
     - Chinese
     - PRC
-    hours: 24
     max_results: 15
+    min_articles: 2
     min_media_count: 2
-    exclude_china_media: true
+    name: 外媒报道中国
     schedule: 0 */4 * * *
-  us_news:
+    similarity_threshold: 0.3
+  hk_tw_macau:
+    description: 香港、台湾、澳门政治与社会新闻（区别于中国大陆）
     enabled: true
-    name: 美国新闻
-    description: 美国内政、外交、军事、经济新闻
-    keywords:
-    # 国家和城市
-    - 美国
-    - 华盛顿
-    - 纽约
-    - 洛杉矶
-    - 芝加哥
-    - 旧金山
-    - 硅谷
-    - 西雅图
-    - 波士顿
-    - 休斯顿
-    - 达拉斯
-    - 迈阿密
-    - USA
-    - US
-    - America
-    # 核心领导人（最新 - 特朗普第二任期）
-    - 特朗普
-    - 川普
-    - Trump
-    - 范斯
-    - 万斯
-    - Vance
-    - 马斯克
-    - Musk
-    - 拜登
-    - Biden
-    - 哈里斯
-    - 贺锦丽
-    - Harris
-    - 奥巴马
-    - Obama
-    - 彭斯
-    - Pence
-    - 佩洛西
-    - Pelosi
-    - 卢比奥
-    - Rubio
-    - 赫格塞斯
-    - Hegseth
-    - 蓬佩奥
-    - Pompeo
-    - 布林肯
-    - Blinken
-    - 沙利文
-    - Sullivan
-    - 耶伦
-    - Yellen
-    - 鲍威尔
-    - Powell
-    # 重要机构
-    - 白宫
-    - White House
-    - 五角大楼
-    - Pentagon
-    - 美国国防部
-    - 国会
-    - Congress
-    - 参议院
-    - Senate
-    - 众议院
-    - House
-    - 美联储
-    - Fed
-    - CIA
-    - FBI
-    - 国务院
-    - 最高法院
-    - 美军
-    # 美国相关事件
-    - 美国大选
-    - 美国总统
-    - 总统选举
-    - 中期选举
-    - 美中关系
-    - 美俄关系
-    - 美欧关系
-    - 美日关系
-    - 美国经济
-    - 美元
-    - 通胀
-    - 利率
-    - 加息
-    - 降息
-    - 边境
-    - 移民
-    - 关税
-    - 贸易战
-    - 芯片法案
-    # 美国科技公司
-    - 苹果
-    - Apple
-    - 微软
-    - Microsoft
-    - 谷歌
-    - Google
-    - 亚马逊
-    - Amazon
-    - Meta
-    - Facebook
-    - OpenAI
-    - ChatGPT
-    - 英伟达
-    - NVIDIA
-    hours: 24
-    max_results: 20
-    min_media_count: 2
     exclude_china_media: true
-    schedule: 0 */6 * * *
-  japan_news:
-    enabled: true
-    name: 日本新闻
-    description: 日本政治、经济、军事、外交新闻
+    hours: 24
     keywords:
-    # 国家和城市
+    - 香港
+    - Hong Kong
+    - 台湾
+    - Taiwan
+    - 澳门
+    - Macau
+    - 港台
+    - 港澳
+    - 台港澳
+    - 两岸三地
+    - 香港特首
+    - 香港行政长官
+    - 李家超
+    - 郑丽文
+    - 林郑月娥
+    - 港府
+    - 香港政府
+    - 香港立法会
+    - 立法会
+    - 区议会
+    - 一国两制
+    - 港人治港
+    - 国安法
+    - 香港国安法
+    - 港独
+    - 国安处
+    - 香港警方
+    - 大湾区
+    - 粤港澳大湾区
+    - 台湾总统
+    - 台湾领导人
+    - 台湾当局
+    - 台当局
+    - 赖清德
+    - 蔡英文
+    - 马英九
+    - 韩国瑜
+    - 柯文哲
+    - 侯友宜
+    - 朱立伦
+    - 民进党
+    - DPP
+    - 国民党
+    - KMT
+    - 台湾立法院
+    - 台独
+    - 台湾独立
+    - 九二共识
+    - 台海
+    - 台湾海峡
+    - 两岸关系
+    - 两岸统一
+    - 台湾大选
+    - 台湾选举
+    - 台湾军方
+    - 台军
+    - 美台
+    - 台美
+    - 台日
+    - 澳门特首
+    - 澳门行政长官
+    - 岑浩辉
+    - 贺一诚
+    - 澳门政府
+    max_results: 15
+    min_articles: 2
+    min_media_count: 2
+    name: 港澳台新闻
+    schedule: 0 */4 * * *
+    similarity_threshold: 0.28
+  japan_news:
+    description: 日本政治、经济、军事、外交新闻
+    enabled: true
+    exclude_china_media: true
+    hours: 24
+    keywords:
     - 日本
     - 东京
     - Tokyo
@@ -240,7 +321,6 @@ categories:
     - Fukushima
     - Japan
     - Japanese
-    # 核心领导人（最新 - 石破茂2024年10月上任）
     - 石破茂
     - Ishiba
     - 岸田
@@ -260,7 +340,6 @@ categories:
     - 高市早苗
     - Takaichi
     - 日本首相
-    # 重要机构
     - 自民党
     - LDP
     - 民主党
@@ -280,7 +359,6 @@ categories:
     - 自卫队
     - 日本自卫队
     - JSDF
-    # 日本相关事件
     - 日元
     - Yen
     - JPY
@@ -310,17 +388,18 @@ categories:
     - 日本经济
     - 日本GDP
     - 日本利率
-    hours: 24
     max_results: 15
+    min_articles: 2
     min_media_count: 2
-    exclude_china_media: true
+    name: 日本新闻
     schedule: 0 */6 * * *
+    similarity_threshold: 0.25
   middle_east:
-    enabled: true
-    name: 中东新闻
     description: 中东地区冲突、石油、外交新闻
+    enabled: true
+    exclude_china_media: true
+    hours: 24
     keywords:
-    # 地区和国家
     - 中东
     - Middle East
     - 伊朗
@@ -368,7 +447,6 @@ categories:
     - Tehran
     - 耶路撒冷
     - Jerusalem
-    # 核心领导人
     - 内塔尼亚胡
     - Netanyahu
     - 哈梅内伊
@@ -385,7 +463,6 @@ categories:
     - Haniyeh
     - 辛瓦尔
     - Sinwar
-    # 组织和武装
     - 哈马斯
     - Hamas
     - 真主党
@@ -397,7 +474,6 @@ categories:
     - 塔利班
     - Taliban
     - 基地组织
-    # 关键地点
     - 霍尔木兹
     - Hormuz
     - 红海
@@ -407,7 +483,6 @@ categories:
     - 戈兰高地
     - 西岸
     - 加沙地带
-    # 相关事件
     - 巴以冲突
     - 以巴冲突
     - 以哈战争
@@ -421,235 +496,165 @@ categories:
     - 制裁伊朗
     - 红海危机
     - 航运袭击
-    hours: 24
     max_results: 15
+    min_articles: 2
     min_media_count: 2
-    exclude_china_media: true
+    name: 中东新闻
     schedule: 0 */4 * * *
-  hk_tw_macau:
+    similarity_threshold: 0.3
+  us_news:
+    description: 美国内政、外交、军事、经济新闻
     enabled: true
-    name: 港澳台新闻
-    description: 香港、台湾、澳门政治与社会新闻（区别于中国大陆）
-    keywords:
-    # 地区
-    - 香港
-    - Hong Kong
-    - 台湾
-    - Taiwan
-    - 澳门
-    - Macau
-    - 港台
-    - 港澳
-    - 台港澳
-    - 两岸三地
-    # 香港相关
-    - 香港特首
-    - 香港行政长官
-    - 李家超
-    - 林郑月娥
-    - 港府
-    - 香港政府
-    - 香港立法会
-    - 立法会
-    - 区议会
-    - 一国两制
-    - 港人治港
-    - 国安法
-    - 香港国安法
-    - 港独
-    - 国安处
-    - 香港警方
-    - 大湾区
-    - 粤港澳大湾区
-    # 台湾相关
-    - 台湾总统
-    - 台湾领导人
-    - 台湾当局
-    - 台当局
-    - 赖清德
-    - 蔡英文
-    - 马英九
-    - 韩国瑜
-    - 柯文哲
-    - 侯友宜
-    - 朱立伦
-    - 民进党
-    - DPP
-    - 国民党
-    - KMT
-    - 台湾立法院
-    - 台独
-    - 台湾独立
-    - 九二共识
-    - 台海
-    - 台湾海峡
-    - 两岸关系
-    - 两岸统一
-    - 台湾大选
-    - 台湾选举
-    - 台湾军方
-    - 台军
-    - 美台
-    - 台美
-    - 台日
-    # 澳门相关
-    - 澳门特首
-    - 澳门行政长官
-    - 岑浩辉
-    - 贺一诚
-    - 澳门政府
-    hours: 24
-    max_results: 15
-    min_media_count: 2
     exclude_china_media: true
-    schedule: 0 */4 * * *
-  asia_neighbors:
-    enabled: true
-    name: 亚洲周边国家
-    description: 亚洲周边国家新闻（不含中日港澳台）
-    keywords:
-    # 韩国和朝鲜
-    - 韩国
-    - Korea
-    - Korean
-    - South Korea
-    - 首尔
-    - Seoul
-    - 尹锡悦
-    - Yoon
-    - 李在明
-    - 朴槿惠
-    - 文在寅
-    - 韩国总统
-    - 韩国国会
-    - 共同民主党
-    - 朝鲜
-    - North Korea
-    - 北韩
-    - 平壤
-    - Pyongyang
-    - 金正恩
-    - Kim Jong-un
-    - 金与正
-    - 朝鲜劳动党
-    - 朝核
-    - 朝鲜核
-    - 导弹试射
-    - 韩朝
-    - 南北韩
-    - 朝韩
-    - 朝鲜半岛
-    # 蒙古
-    - 蒙古
-    - Mongolia
-    - 乌兰巴托
-    # 越南
-    - 越南
-    - Vietnam
-    - 河内
-    - 胡志明市
-    # 泰国
-    - 泰国
-    - Thailand
-    - 曼谷
-    - 泰王
-    - 泰国总理
-    # 菲律宾
-    - 菲律宾
-    - Philippines
-    - 马尼拉
-    - 马科斯
-    - 杜特尔特
-    - 仁爱礁
-    - 仙宾礁
-    # 马来西亚
-    - 马来西亚
-    - Malaysia
-    - 吉隆坡
-    - 安华
-    - 马哈迪
-    # 印尼
-    - 印尼
-    - Indonesia
-    - 印度尼西亚
-    - 雅加达
-    - 佐科
-    - 普拉博沃
-    # 新加坡
-    - 新加坡
-    - Singapore
-    - 李显龙
-    - 黄循财
-    # 缅甸
-    - 缅甸
-    - Myanmar
-    - 仰光
-    - 缅甸军方
-    - 昂山素季
-    - 缅北
-    # 柬埔寨
-    - 柬埔寨
-    - Cambodia
-    - 金边
-    - 洪森
-    # 老挝
-    - 老挝
-    - Laos
-    - 万象
-    # 印度
-    - 印度
-    - India
-    - 新德里
-    - 莫迪
-    - Modi
-    - 印度总理
-    - 印度军方
-    - 印军
-    - 中印
-    - 印中
-    - 印巴
-    - 拉达克
-    # 巴基斯坦
-    - 巴基斯坦
-    - Pakistan
-    - 伊斯兰堡
-    - 克什米尔
-    # 孟加拉国
-    - 孟加拉
-    - Bangladesh
-    - 达卡
-    # 斯里兰卡
-    - 斯里兰卡
-    - Sri Lanka
-    - 科伦坡
-    # 尼泊尔
-    - 尼泊尔
-    - Nepal
-    - 加德满都
-    # 不丹
-    - 不丹
-    - Bhutan
-    # 中亚五国
-    - 哈萨克斯坦
-    - Kazakhstan
-    - 乌兹别克斯坦
-    - Uzbekistan
-    - 吉尔吉斯斯坦
-    - Kyrgyzstan
-    - 塔吉克斯坦
-    - Tajikistan
-    - 土库曼斯坦
-    - Turkmenistan
-    # 阿富汗
-    - 阿富汗
-    - Afghanistan
-    - 喀布尔
-    # 区域组织
-    - 东盟
-    - ASEAN
-    - 亚太
     hours: 24
+    keywords:
+    - 美国
+    - 华盛顿
+    - 纽约
+    - 洛杉矶
+    - 芝加哥
+    - 旧金山
+    - 硅谷
+    - 西雅图
+    - 波士顿
+    - 休斯顿
+    - 达拉斯
+    - 迈阿密
+    - USA
+    - US
+    - America
+    - 特朗普
+    - 川普
+    - Trump
+    - 范斯
+    - 万斯
+    - Vance
+    - 马斯克
+    - Musk
+    - 拜登
+    - Biden
+    - 哈里斯
+    - 贺锦丽
+    - Harris
+    - 奥巴马
+    - Obama
+    - 彭斯
+    - Pence
+    - 佩洛西
+    - Pelosi
+    - 卢比奥
+    - Rubio
+    - 赫格塞斯
+    - Hegseth
+    - 蓬佩奥
+    - Pompeo
+    - 布林肯
+    - Blinken
+    - 沙利文
+    - Sullivan
+    - 耶伦
+    - Yellen
+    - 鲍威尔
+    - Powell
+    - 白宫
+    - White House
+    - 五角大楼
+    - Pentagon
+    - 美国国防部
+    - 国会
+    - Congress
+    - 参议院
+    - Senate
+    - 众议院
+    - House
+    - 美联储
+    - Fed
+    - CIA
+    - FBI
+    - 国务院
+    - 最高法院
+    - 美军
+    - 美国大选
+    - 美国总统
+    - 总统选举
+    - 中期选举
+    - 美中关系
+    - 美俄关系
+    - 美欧关系
+    - 美日关系
+    - 美国经济
+    - 美元
+    - 通胀
+    - 利率
+    - 加息
+    - 降息
+    - 边境
+    - 移民
+    - 关税
+    - 贸易战
+    - 芯片法案
+    - 苹果
+    - Apple
+    - 微软
+    - Microsoft
+    - 谷歌
+    - Google
+    - 亚马逊
+    - Amazon
+    - Meta
+    - Facebook
+    - OpenAI
+    - ChatGPT
+    - 英伟达
+    - NVIDIA
     max_results: 20
+    min_articles: 1
     min_media_count: 2
-    exclude_china_media: true
-    schedule: 0 */4 * * *
+    name: 美国新闻
+    schedule: 0 */6 * * *
+    similarity_threshold: 0.35
+settings:
+  default_hours: 24
+  default_max_results: 15
+  default_min_media: 2
+  narrative_provider: volcengine
+  pinning_keywords:
+  - 美媒
+  - 日媒
+  - 突发
+  - 习近平
+  - 特朗普
+  - 川普
+  - 普京
+  - 高市早苗
+  - 查尔斯三世
+  - 马克龙
+  - 默茨
+  - 古特雷斯
+  - 李家超
+  - 岑浩辉
+  - 赖清德
+  - 郑丽文
+  - 李在明
+  - 金正恩
+  - 莫迪
+  - 穆尔穆
+  - 苏比延多
+  - 钦那瓦
+  - 尚达曼
+  - 黄循财
+  - 梁强
+  - 范明政
+  - 萨勒曼
+  - 穆罕默德·本·萨勒曼
+  - 哈梅内伊
+  - 埃尔多安
+  - 穆罕默德·本·扎耶德·阿勒纳哈扬
+  - 内塔尼亚胡
+  - 塞西
+  - 梅洛尼
+  - 泽连斯基
+  - 卢卡申科
+  - 巴尔特·德韦弗
+  - 欧尔班·维克多
+  retention_days: 30

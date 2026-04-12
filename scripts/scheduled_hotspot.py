@@ -7,14 +7,13 @@
 2. 支持定时执行和手动触发
 3. 支持历史记录存储
 4. 提供CLI和API两种调用方式
-5. 支持 v2（旧版叙事提取）和 v3（新版 event_key 流水线）两种模式
+5. 基于 event_key 流水线的热点聚合
 
 使用方式：
     python scripts/scheduled_hotspot.py --help
     python scripts/scheduled_hotspot.py --list
     python scripts/scheduled_hotspot.py --run china_related
     python scripts/scheduled_hotspot.py --run-all
-    python scripts/scheduled_hotspot.py --run-all --pipeline v3
     python scripts/scheduled_hotspot.py --daemon
 """
 
@@ -240,196 +239,6 @@ def cleanup_old_records(days: int = 30, conn=None):
             conn.close()
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 核心检测逻辑（v2 — 叙事提取模式）
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def run_detection(category_id: str, hours: int = None, max_results: int = None,
-                  keywords: list = None, provider: str = None, conn=None, quiet: bool = False) -> dict:
-    """
-    执行热点检测 (v2 — 叙事提取模式)
-
-    新流程：
-    1. 拉取全量文章（不再逐关键字循环）
-    2. 本地快速聚类
-    3. LLM 提取叙事 + 自动分类
-    4. 按 category_id 筛选叙事
-    5. 转换为 event 格式输出
-
-    Args:
-        category_id: 分类ID
-        hours: 时间窗口（覆盖配置）
-        max_results: 最大结果数（覆盖配置）
-        keywords: (已弃用，保留参数兼容性)
-        provider: LLM 提供商
-        conn: 数据库连接
-        quiet: 静默模式（只返回JSON，不打印调试信息）
-
-    Returns:
-        检测结果
-    """
-    # 延迟导入叙事提取模块
-    from narrative_extractor import (
-        extract_narratives, filter_narratives_by_category,
-        narrative_to_event
-    )
-    from hotspot_detector import _cluster_articles
-    from llm_tagger import load_llm_config
-
-    # 获取配置
-    cat_cfg = get_category_config(category_id)
-    if not cat_cfg:
-        if not quiet:
-            print(f"[ERROR] 未找到分类配置: {category_id}")
-        return {'error': f'Category not found: {category_id}'}
-
-    if not cat_cfg.get('enabled', True):
-        if not quiet:
-            print(f"[INFO] 分类已禁用: {category_id}")
-        return {'error': f'Category disabled: {category_id}'}
-
-    # 合并参数
-    hours = hours or cat_cfg.get('hours', 24)
-    max_results = max_results or cat_cfg.get('max_results', 15)
-    exclude_china_media = cat_cfg.get('exclude_china_media', False)
-    category_name = cat_cfg.get('name', category_id)
-
-    if not quiet:
-        print(f"\n{'='*60}")
-        print(f"[检测 v2] {category_name}")
-        print(f"  时间窗口: {hours}h")
-        print(f"  模式: 叙事提取 (自动发现热点)")
-        print(f"  排除中国媒体: {exclude_china_media}")
-        print(f"  LLM Provider: {provider or '默认'}")
-        print('='*60)
-
-    # ── Step 1: 拉取全量文章 ──────────────────────────────────
-    own_conn = conn is None
-    if own_conn:
-        conn = get_conn()
-        init_db(conn)
-
-    try:
-        now = datetime.now(TZ_BJ)
-        q_start = (now - timedelta(hours=hours)).isoformat()
-        q_end = now.isoformat()
-
-        rows = conn.execute(
-            "SELECT * FROM articles WHERE published >= ? AND published <= ? ORDER BY published DESC",
-            [q_start, q_end]
-        ).fetchall()
-
-        articles = []
-        for row in rows:
-            a = dict(row)
-            # 根据分类配置决定是否过滤中国媒体
-            if exclude_china_media and is_chinese_media(a.get('platform', ''), a.get('url', '')):
-                continue
-            if a.get('id') and a.get('title'):
-                articles.append(a)
-
-        if not quiet:
-            print(f"[Step 1] 文章池: {len(articles)} 篇 (时间窗口 {hours}h)")
-
-        if not articles:
-            if not quiet:
-                print(f"\n[完成] 时间窗口内无文章")
-            return {
-                'category_id': category_id,
-                'category_name': category_name,
-                'executed_at': now.isoformat(),
-                'time_window_hours': hours,
-                'keywords_used': [],
-                'event_count': 0,
-                'events': []
-            }
-
-        # ── Step 2: 本地快速聚类 ──────────────────────────────
-        threshold = cat_cfg.get('similarity_threshold', 0.30)
-        clusters = _cluster_articles(articles, threshold=threshold)
-        significant = [c for c in clusters if len(c['items']) >= 2]
-        if not quiet:
-            print(f"[Step 2] 聚类完成: {len(clusters)} 个簇, 其中 {len(significant)} 个有 ≥2 篇文章")
-
-        if not significant:
-            if not quiet:
-                print(f"\n[完成] 无显著聚类")
-            return {
-                'category_id': category_id,
-                'category_name': category_name,
-                'executed_at': now.isoformat(),
-                'time_window_hours': hours,
-                'keywords_used': [],
-                'event_count': 0,
-                'events': []
-            }
-
-        # ── Step 3: LLM 叙事提取 ─────────────────────────────
-        llm_cfg = load_llm_config()
-        narratives = extract_narratives(
-            significant, llm_cfg, provider=provider, max_clusters=25, quiet=quiet
-        )
-        if not quiet:
-            print(f"[Step 3] 叙事提取完成: {len(narratives)} 个叙事")
-
-        # ── Step 4: 按分类筛选 ────────────────────────────────
-        category_narratives = filter_narratives_by_category(narratives, category_id)
-        if not quiet:
-            print(f"[Step 4] 分类筛选 '{category_name}': {len(category_narratives)} 个叙事命中")
-
-        # ── Step 5: 转换为 event 格式 ─────────────────────────
-        events = []
-        for n in category_narratives[:max_results]:
-            event = narrative_to_event(n)
-            events.append(event)
-
-        # 按热度排序
-        events.sort(key=lambda x: x.get('score', 0), reverse=True)
-        events = events[:max_results]
-
-        # ── 保存结果 ──────────────────────────────────────────
-        if events:
-            # 保存前清理 items 中的大字段以避免数据库过大
-            events_for_save = []
-            for e in events:
-                save_event = {k: v for k, v in e.items() if k != 'items'}
-                save_event['articles'] = [
-                    {
-                        'id': a.get('id'),
-                        'title': a.get('title', ''),
-                        'url': a.get('url', ''),
-                        'platform': a.get('platform', ''),
-                        'published': a.get('published', ''),
-                        'summary': a.get('summary', '')[:200],
-                    }
-                    for a in e.get('items', [])
-                ]
-                save_event['article_count'] = len(save_event['articles'])
-                events_for_save.append(save_event)
-
-            record_id = save_hotspot_result(
-                category_id, category_name, events_for_save,
-                hours, [], conn
-            )
-            if not quiet:
-                print(f"\n[完成] 检测到 {len(events)} 个热点叙事，已保存 (ID: {record_id})")
-        else:
-            if not quiet:
-                print(f"\n[完成] 该分类无匹配叙事")
-
-        return {
-            'category_id': category_id,
-            'category_name': category_name,
-            'executed_at': now.isoformat(),
-            'time_window_hours': hours,
-            'keywords_used': [],
-            'event_count': len(events),
-            'events': events
-        }
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -441,8 +250,22 @@ CATEGORY_ID_MAP = {
     'china_related': 'foreign_china',
     'hk_tw_macau': 'greater_china',
     'asia_neighbors': 'asia_other',
-    # us_news, japan_news, middle_east 保持不变
+    # us_news, japan_news, middle_east, international 保持不变
 }
+
+# Agent 可用的分类列表
+AGENT_CATEGORIES = [
+    'international',    # 国际热点
+    'foreign_china',    # 外媒报道中国
+    'us_news',          # 美国新闻
+    'japan_news',       # 日本新闻
+    'middle_east',      # 中东新闻
+    'greater_china',    # 港澳台新闻
+    'asia_other',       # 亚洲其他国家
+]
+
+# 旧分类名（兼容）
+LEGACY_CATEGORIES = ['china_related', 'us_news', 'japan_news', 'middle_east', 'hk_tw_macau', 'asia_neighbors']
 
 
 def run_detection_v3(
@@ -512,32 +335,81 @@ def run_detection_v3(
     # 提取指定分类的热点
     hotspots = result.get('categories', {}).get(mapped_category_id, [])
 
+    # 导入 HotspotEvent 用于类型检查
+    from event_aggregator import HotspotEvent
+
     # 转换为旧格式（兼容现有前端）
     # 注意：确保返回的数据格式与数据库存储格式一致
     events = []
     for h in hotspots[:max_results]:
+        # 处理 HotspotEvent 对象和字典
+        if isinstance(h, HotspotEvent):
+            h_dict = h.to_dict()
+        else:
+            h_dict = h
+
         event = {
-            'title': h.get('representative_title', ''),
-            'representative_title': h.get('representative_title', ''),  # 添加此字段保持一致
-            'score': h.get('score', 0),
-            'count': h.get('article_count', 0),
-            'media_count': len(h.get('sources', [])),
-            's_tier_count': h.get('s_tier_count', 0),  # 添加此字段
-            'platforms': h.get('sources', []),
-            'sources': h.get('sources', []),  # 添加此字段
-            'tags': h.get('entities', []),
-            'entities': h.get('entities', []),  # 添加此字段
-            'latest_published': h.get('latest_published', ''),  # 添加时间字段
+            'title': h_dict.get('representative_title', ''),
+            'representative_title': h_dict.get('representative_title', ''),  # 添加此字段保持一致
+            'score': h_dict.get('score', 0),
+            'count': h_dict.get('article_count', 0),
+            'media_count': len(h_dict.get('sources', [])),
+            's_tier_count': h_dict.get('s_tier_count', 0),  # 添加此字段
+            'platforms': h_dict.get('sources', []),
+            'sources': h_dict.get('sources', []),  # 添加此字段
+            'tags': h_dict.get('entities', []),
+            'entities': h_dict.get('entities', []),  # 添加此字段
+            'latest_published': h_dict.get('latest_published', ''),  # 添加时间字段
+            's_tier_sources': h_dict.get('s_tier_sources', []),  # 核心修复：添加 S 级媒体列表
             'is_china_related': mapped_category_id == 'foreign_china',
-            'article_ids': [a.get('id') for a in h.get('articles', []) if a.get('id')],
-            'article_count': h.get('article_count', 0),
-            'items': h.get('articles', []),
+            'article_ids': [a.get('id') for a in h_dict.get('articles', []) if a.get('id')],
+            'article_count': h_dict.get('article_count', 0),
+            'items': h_dict.get('articles', []),
         }
         events.append(event)
 
     # 计算执行耗时
     end_time = datetime.now(TZ_BJ)
     duration_seconds = int((end_time - start_time).total_seconds())
+
+    # ── 保存结果 ──
+    if events:
+        # 保存前清理详情内容以避免数据库过大
+        events_for_save = []
+        for e in events:
+            # 保留关键字段，移除大字段
+            save_event = {
+                'title': e.get('title', ''),
+                'representative_title': e.get('representative_title', ''),
+                'score': e.get('score', 0),
+                'count': e.get('count', 0),
+                'media_count': e.get('media_count', 0),
+                's_tier_count': e.get('s_tier_count', 0),
+                'sources': e.get('sources', []),  # 确保 sources 被保存
+                'platforms': e.get('platforms', []),
+                'entities': e.get('entities', []),
+                'tags': e.get('tags', []),
+                'latest_published': e.get('latest_published', ''),
+                'article_ids': e.get('article_ids', []),
+                'article_count': e.get('article_count', 0),
+            }
+            save_event['articles'] = [
+                {
+                    'id': a.get('id'),
+                    'title': a.get('title', ''),
+                    'url': a.get('url', ''),
+                    'platform': a.get('platform', ''),
+                    'published': a.get('published', ''),
+                    'summary': a.get('summary', '')[:200],
+                }
+                for a in e.get('items', [])
+            ]
+            events_for_save.append(save_event)
+
+        save_hotspot_result(
+            category_id, category_name, events_for_save,
+            hours, [], conn=None
+        )
 
     # 确定状态
     status = 'success' if events else 'partial'
@@ -608,12 +480,12 @@ def run_all_categories_v3(
                 'tags': h.get('entities', []),
                 'is_china_related': mapped_cat_id == 'foreign_china',
                 'article_ids': [a.get('id') for a in h.get('articles', []) if a.get('id')],
-                'article_count': h.get('article_count', 0),
+                's_tier_sources': h.get('s_tier_sources', []),  # 核心修复：添加 S 级媒体列表
                 'items': h.get('articles', []),
             }
             events.append(event)
 
-        results.append({
+        cat_result = {
             'category_id': old_cat_id,
             'category_name': category_name,
             'executed_at': result.get('stats', {}).get('executed_at', ''),
@@ -621,13 +493,39 @@ def run_all_categories_v3(
             'keywords_used': [],
             'event_count': len(events),
             'events': events,
-        })
+        }
+
+        # ── 保存各分类结果 ──
+        if events:
+            events_for_save = []
+            for e in events:
+                save_event = {k: v for k, v in e.items() if k != 'items'}
+                save_event['articles'] = [
+                    {
+                        'id': a.get('id'),
+                        'title': a.get('title', ''),
+                        'url': a.get('url', ''),
+                        'platform': a.get('platform', ''),
+                        'published': a.get('published', ''),
+                        'summary': a.get('summary', '')[:200],
+                    }
+                    for a in e.get('items', [])
+                ]
+                save_event['article_count'] = len(save_event['articles'])
+                events_for_save.append(save_event)
+
+            save_hotspot_result(
+                old_cat_id, category_name, events_for_save,
+                hours, [], conn=None
+            )
+
+        results.append(cat_result)
 
     return results
 
 
 def run_all_categories(conn=None) -> list:
-    """执行所有启用的分类检测"""
+    """执行所有启用的分类检测（使用 v3 流水线）"""
     cfg = load_config()
     categories = cfg.get('categories', {})
 
@@ -635,7 +533,7 @@ def run_all_categories(conn=None) -> list:
     for cat_id, cat_cfg in categories.items():
         if cat_cfg.get('enabled', True):
             try:
-                result = run_detection(cat_id, conn=conn)
+                result = run_detection_v3(cat_id)
                 results.append(result)
             except Exception as e:
                 print(f"[ERROR] {cat_id} 检测失败: {e}")
@@ -724,11 +622,12 @@ def _daemon_loop():
                     # 避免同一分钟内重复执行
                     last_key = f"{cat_id}_{now.strftime('%Y%m%d%H%M')}"
                     if last_key not in last_run:
-                        print(f"\n[DAEMON] 触发定时任务: {cat_cfg.get('name', cat_id)}")
+                        print(f"\n[DAEMON] 触发定时任务: {cat_cfg.get('name', cat_id)} (V3 流水线)")
                         try:
-                            run_detection(cat_id)
+                            # 迁移至 V3 流水线
+                            run_detection_v3(cat_id)
                         except Exception as e:
-                            print(f"[ERROR] 定时任务执行失败: {e}")
+                            print(f"[ERROR] 定时探测（V3）执行失败: {e}")
                         last_run[last_key] = True
 
             # 清理过期的执行记录（每小时清理一次）
@@ -779,13 +678,15 @@ def main():
         epilog="""
 示例:
   # Agent 推荐使用 --type 参数（返回 JSON）
-  python scripts/scheduled_hotspot.py --type china_related --hours 24 --json
+  python scripts/scheduled_hotspot.py --type international --hours 12 --json
+  python scripts/scheduled_hotspot.py --type foreign_china --hours 24 --json
   python scripts/scheduled_hotspot.py --type us_news --hours 6 --json
-  python scripts/scheduled_hotspot.py --type asia_neighbors --hours 24 --json
+  python scripts/scheduled_hotspot.py --type middle_east --hours 12 --json
+  python scripts/scheduled_hotspot.py --type japan_news --hours 24 --json
 
   # 其他操作
   python scripts/scheduled_hotspot.py --list
-  python scripts/scheduled_hotspot.py --run china_related
+  python scripts/scheduled_hotspot.py --run foreign_china
   python scripts/scheduled_hotspot.py --run-all
   python scripts/scheduled_hotspot.py --daemon
         """
@@ -793,7 +694,7 @@ def main():
 
     # Agent 专用接口（推荐）
     parser.add_argument('--type', type=str, metavar='CATEGORY',
-                        help='获取指定分类热点（返回JSON）: china_related, us_news, japan_news, middle_east, hk_tw_macau, asia_neighbors')
+                        help='获取指定分类热点（返回JSON）: international, foreign_china, us_news, japan_news, middle_east, greater_china, asia_other')
 
     # 主要操作
     parser.add_argument('--list', action='store_true', help='列出所有分类配置')
@@ -806,14 +707,12 @@ def main():
     # 参数覆盖
     parser.add_argument('--hours', type=int, default=24, help='时间窗口（小时），默认24')
     parser.add_argument('--max', type=int, help='最大结果数')
-    parser.add_argument('--keywords', type=str, help='关键字（逗号分隔）')
-    parser.add_argument('--pipeline', type=str, choices=['v2', 'v3'], default='v3',
-                        help='流水线版本: v2(旧版叙事提取) 或 v3(新版event_key)，默认v3')
     parser.add_argument('--provider', type=str, help='指定 LLM 提供商')
 
     # 输出格式
     parser.add_argument('--json', action='store_true', help='JSON格式输出')
     parser.add_argument('--brief', action='store_true', help='简洁模式')
+    parser.add_argument('--simple', action='store_true', help='Agent精简模式（仅热点标题+来源文章）')
 
     # 历史记录参数
     parser.add_argument('--category', type=str, help='指定分类')
@@ -831,38 +730,56 @@ def main():
 
     # --type 参数：Agent 专用接口（优先处理）
     if args.type:
-        valid_categories = ['china_related', 'us_news', 'japan_news',
-                           'middle_east', 'hk_tw_macau', 'asia_neighbors']
+        # 支持新旧分类名
+        valid_categories = AGENT_CATEGORIES + LEGACY_CATEGORIES
         if args.type not in valid_categories:
             result = {
                 'error': f'无效分类: {args.type}',
-                'valid_categories': valid_categories
+                'valid_categories': AGENT_CATEGORIES
             }
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return
 
-        # 根据 pipeline 版本选择检测函数
-        if args.pipeline == 'v3':
-            result = run_detection_v3(
-                args.type,
-                hours=args.hours,
-                max_results=args.max,
-                provider=args.provider,
-                quiet=True
-            )
-        else:
-            keywords = args.keywords.split(',') if args.keywords else None
-            result = run_detection(
-                args.type,
-                hours=args.hours,
-                max_results=args.max,
-                keywords=keywords,
-                provider=args.provider,
-                quiet=True
-            )
+        result = run_detection_v3(
+            args.type,
+            hours=args.hours,
+            max_results=args.max,
+            provider=args.provider,
+            quiet=True
+        )
 
-        # 强制 JSON 输出
-        output = json.dumps(result, ensure_ascii=False, indent=2)
+        # Agent 精简模式
+        if args.simple:
+            simple_result = {
+                'category': result.get('category_name', ''),
+                'count': result.get('event_count', 0),
+                'hotspots': []
+            }
+            for e in result.get('events', []):
+                hotspot = {
+                    'title': e.get('title', ''),
+                    'score': e.get('score', 0),
+                    'media_count': e.get('media_count', 0),
+                    'articles': []
+                }
+                # 只保留文章核心字段
+                for a in e.get('items', []):
+                    article = {
+                        'title': a.get('title', ''),
+                        'url': a.get('url', ''),
+                        'platform': a.get('platform', ''),
+                        'published': a.get('published', ''),
+                    }
+                    # 摘要（如果有）
+                    if a.get('summary'):
+                        article['summary'] = a['summary'][:300]
+                    hotspot['articles'].append(article)
+                simple_result['hotspots'].append(hotspot)
+
+            output = json.dumps(simple_result, ensure_ascii=False, indent=2)
+        else:
+            output = json.dumps(result, ensure_ascii=False, indent=2)
+
         try:
             print(output)
         except UnicodeEncodeError:
@@ -889,22 +806,12 @@ def main():
 
     # 执行指定分类
     if args.run:
-        if args.pipeline == 'v3':
-            result = run_detection_v3(
-                args.run,
-                hours=args.hours,
-                max_results=args.max,
-                provider=args.provider
-            )
-        else:
-            keywords = args.keywords.split(',') if args.keywords else None
-            result = run_detection(
-                args.run,
-                hours=args.hours,
-                max_results=args.max,
-                keywords=keywords,
-                provider=args.provider
-            )
+        result = run_detection_v3(
+            args.run,
+            hours=args.hours,
+            max_results=args.max,
+            provider=args.provider
+        )
 
         if args.json:
             # Windows终端编码处理
@@ -920,14 +827,11 @@ def main():
 
     # 执行所有分类
     if args.run_all:
-        if args.pipeline == 'v3':
-            results = run_all_categories_v3(
-                hours=args.hours,
-                provider=args.provider,
-                max_results=args.max
-            )
-        else:
-            results = run_all_categories()
+        results = run_all_categories_v3(
+            hours=args.hours,
+            provider=args.provider,
+            max_results=args.max
+        )
         if args.json:
             print(json.dumps(results, ensure_ascii=False, indent=2))
         else:
@@ -1029,6 +933,8 @@ def print_result(result: dict, brief: bool = False):
     events = result.get('events', [])
     for i, event in enumerate(events, 1):
         title = event.get('title', '无标题')
+        # 过滤非法 Unicode 字符
+        title = ''.join(c for c in title if c.isprintable() and ord(c) < 0x10000)
         score = event.get('score', 0)
         media_count = event.get('media_count', len(event.get('platforms', [])))
         article_count = event.get('article_count', event.get('count', 0))

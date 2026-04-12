@@ -1,4 +1,22 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(sqlite3 data/news.db \"SELECT id, title, event_key, is_political FROM articles WHERE published >= datetime\\('now', '-24 hours'\\) AND \\(title LIKE '%足球%' OR title LIKE '%篮球%' OR title LIKE '%体育%' OR title LIKE '%比赛%' OR title LIKE '%冠军%' OR title LIKE '%选手%' OR title LIKE '%联赛%'\\) ORDER BY published DESC LIMIT 20\")",
+      "Bash(sqlite3 data/news.db \"SELECT id, title, event_key, is_political FROM articles WHERE published >= datetime\\('now', '-48 hours'\\) AND \\(title LIKE '%足球%' OR title LIKE '%篮球%' OR title LIKE '%联赛%' OR title LIKE '%比赛%' OR title LIKE '%冠军%' OR title LIKE '%选手%' OR title LIKE '%奥运%' OR title LIKE '%体育%' OR title LIKE '%网球%' OR title LIKE '%F1%' OR title LIKE '%NBA%' OR title LIKE '%英超%'\\) ORDER BY published DESC LIMIT 30\")",
+      "Bash(sqlite3 data/news.db ':*)",
+      "Bash(sqlite3 data/news.db \"SELECT event_key, COUNT\\(*\\) as cnt FROM articles WHERE published >= datetime\\('now', '-1 day', '+8 hours'\\) AND event_key IS NOT NULL AND event_key != '' AND \\(is_political IS NULL OR is_political = 1\\) GROUP BY event_key ORDER BY cnt DESC LIMIT 10\")",
+      "Bash(sqlite3 data/news.db \"SELECT datetime\\('now', '+8 hours'\\) as now_bj, datetime\\('now', '-6 hours', '+8 hours'\\) as cutoff\")",
+      "Bash(sqlite3 data/news.db \"SELECT COUNT\\(*\\) as cnt FROM articles WHERE published >= datetime\\('now', '-6 hours', '+8 hours'\\) AND event_key IS NOT NULL AND event_key != '' AND \\(is_political IS NULL OR is_political = 1\\)\")",
+      "Bash(sqlite3 data/news.db \"SELECT COUNT\\(*\\) FROM articles WHERE published >= datetime\\('now', '-6 hours', '+8 hours'\\)\")",
+      "Bash(sqlite3 data/news.db \"SELECT COUNT\\(*\\) FROM articles WHERE published >= datetime\\('now', '-6 hours', '+8 hours'\\) AND event_key IS NOT NULL AND event_key != ''\")",
+      "Bash(sqlite3 data/news.db \"SELECT event_key, COUNT\\(*\\) as cnt FROM articles WHERE published >= datetime\\('now', '-6 hours', '+8 hours'\\) AND event_key IS NOT NULL AND event_key != '' GROUP BY event_key ORDER BY cnt DESC LIMIT 10\")",
+      "Bash(sqlite3 data/news.db \"SELECT is_political, COUNT\\(*\\) FROM articles WHERE published >= datetime\\('now', '-6 hours', '+8 hours'\\) GROUP BY is_political\")",
+      "Bash(sqlite3 data/news.db \"SELECT MIN\\(published\\), MAX\\(published\\) FROM articles\")",
+      "Bash(sqlite3 data/news.db \"SELECT datetime\\('now', '+8 hours'\\) as now_bj\")",
+      "Bash(sqlite3 data/news.db \"SELECT published, title FROM articles ORDER BY published DESC LIMIT 5\")",
+      "Bash(sqlite3 data/news.db \".schema articles\")"
+    ]
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
   }
