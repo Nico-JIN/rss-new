@@ -110,7 +110,7 @@ def _translate_ext_results(ext_results: list[dict]):
 # ═══════════════════════════════════════════════════════════════════
 
 def cmd_feed(args):
-    """获取指定时间段的全部内容（RSS + 外部源合并去重）"""
+    """获取指定时间段的全部内容（仅本地数据库）"""
     now = _now()
 
     if args.start:
@@ -126,41 +126,21 @@ def cmd_feed(args):
     conn = get_conn()
     init_db(conn)
 
-    # 1. 从本地 DB 获取 RSS 数据
+    # 直接从本地 DB 获取数据
     items = query_by_time(start, end, limit=args.limit or 500, conn=conn)
     conn.close()
 
-    # 2. 从外部源获取全量情报补充 (Google News RSS)
-    if not getattr(args, 'no_external', False):
-        try:
-            searcher = UnifiedSearcher()
-            # 这里的 query 可以是空，或者通用的 "news"
-            ext_results = searcher.search("", sources=['google_news'], max_results=50)
-            
-            # --- 新增：强制翻译外部内容 ---
-            _translate_ext_results(ext_results)
-            # --------------------------
-            
-            items.extend(ext_results)
-            # 入库机制: 存储新抓取的高价值外部数据 (不含中国媒体，filter 会在后面统一做或者提前做)
-            valid_ext = [r for r in ext_results if not is_chinese_media(r.get('platform', r.get('source', '')), r.get('url', ''))]
-            if valid_ext:
-                upsert_external_articles(valid_ext, keyword_match='feed_supplement')
-        except Exception as e:
-            print(f"[WARN] 外部源获取失败: {e}", file=sys.stderr)
-
-    # 3. URL 哈希去重 + 严格过滤中国媒体
+    # URL 哈希去重 + 过滤中国媒体
     seen = set()
     unique = []
     for item in items:
-        # 统一格式处理
         platform = item.get('platform', item.get('source', ''))
         url = item.get('url', '')
-        
-        # 强制过滤中国媒体
+
+        # 过滤中国媒体
         if is_chinese_media(platform, url):
             continue
-            
+
         uh = _url_hash(url)
         if uh not in seen:
             seen.add(uh)
@@ -842,6 +822,7 @@ def main():
     p_feed.add_argument('--with-content', action='store_true', help='包含全文')
     p_feed.add_argument('--no-external', action='store_true', help='禁用外部搜索源')
     p_feed.add_argument('--simple', action='store_true', help='Agent精简模式（仅标题+链接+时间）')
+    p_feed.add_argument('--quiet', '-q', action='store_true', help='静默模式（禁用日志）')
 
     # search
     p_search = sub.add_parser('search', help='关键字+时间搜索')
