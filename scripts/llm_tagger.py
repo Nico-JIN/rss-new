@@ -273,18 +273,54 @@ def _call_deepseek(messages: list[dict], cfg: dict) -> str | None:
 # --- 翻译与语言检测工具 (新增) ---
 
 def is_foreign_text(text: str) -> bool:
-    """启发式检测是否为非中文（外语）"""
+    """检测是否为非中文（外语）- 改进版
+
+    改进点：
+    1. 检测日语假名（平假名、片假名）- 日语汉字会被误判为中文，但假名是日语特有
+    2. 检测韩文（谚文）
+    3. 检测西里尔字母（俄语等）
+    4. 保留原有英文检测逻辑
+    """
     if not text: return False
-    
+
+    # 1. 检测日语假名（平假名、片假名）
+    # 日语汉字与中文汉字共用 Unicode 区间，无法区分
+    # 但假名（平假名、片假名）是日语特有的
+    hiragana = len(re.findall(r'[\u3040-\u309F]', text))   # 平假名 (あ-ん)
+    katakana = len(re.findall(r'[\u30A0-\u30FF]', text))   # 片假名 (ア-ン)
+    if hiragana + katakana > 0:
+        return True  # 日语
+
+    # 2. 检测韩文（谚文）
+    hangul = len(re.findall(r'[\uAC00-\uD7AF]', text))
+    if hangul > 0:
+        return True  # 韩语
+
+    # 3. 检测西里尔字母（俄语、乌克兰语等）
+    cyrillic = len(re.findall(r'[\u0400-\u04FF]', text))
+    if cyrillic > 0:
+        return True  # 俄语等
+
+    # 4. 检测阿拉伯语
+    arabic = len(re.findall(r'[\u0600-\u06FF]', text))
+    if arabic > 0:
+        return True  # 阿拉伯语
+
+    # 5. 检测泰语
+    thai = len(re.findall(r'[\u0E00-\u0E7F]', text))
+    if thai > 0:
+        return True  # 泰语
+
+    # 6. 原有逻辑：检测中文字符占比
     # 提取所有中文字符
     chinese_chars = len(re.findall(r'[\u4e00-\u9fa5]', text))
     # 提取有意义的字符（字母、数字等）
     clean = re.sub(r'[^\w\u4e00-\u9fa5]', '', text)
     total_len = len(clean)
-    
+
     if total_len == 0: return False
-    
-    # 如果中文字符占比低于 20%，或者中文字符极少(<5个)，判定为外语
+
+    # 如果中文字符占比低于 20%，或者中文字符极少(<5个)，判定为外语（主要是英文等拉丁字母语言）
     return (chinese_chars / total_len < 0.2) or (chinese_chars < 5)
 
 # 兼容旧代码调用

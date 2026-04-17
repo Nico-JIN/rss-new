@@ -1097,6 +1097,12 @@ def main():
         llm_cfg = load_llm_config()
         trans_cfg = get_translation_config(llm_cfg)
 
+        # ── 保存原文 ──
+        # 在翻译前保存原始标题和内容
+        for item in all_new:
+            item['original_title'] = item.get('title', '')
+            item['original_content'] = item.get('content', '')
+
         if trans_cfg and trans_cfg.get('llm', {}).get('enabled'):
             # 1. 批量翻译标题（保留，用于显示）
             titles_to_check = [a['title'] for a in all_new]
@@ -1168,6 +1174,8 @@ def main():
                 'title_hash': item['th'],
                 'url':        item['url'],
                 'title':      item['title'],
+                'original_title': item.get('original_title', ''),
+                'original_content': item.get('original_content', ''),
                 'platform':   item['platform'],
                 'media_group': item['_mg'],
                 'country':    item.get('country', ''),

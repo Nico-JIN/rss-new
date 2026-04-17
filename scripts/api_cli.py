@@ -114,20 +114,20 @@ def cmd_feed(args):
     now = _now()
 
     if args.start:
-        start = args.start
-        end = args.end or now.isoformat()
+        start_dt = args.start
+        end_dt = args.end or now
     elif args.hours:
-        start = (now - timedelta(hours=args.hours)).isoformat()
-        end = now.isoformat()
+        start_dt = now - timedelta(hours=args.hours)
+        end_dt = now
     else:
-        start = (now - timedelta(hours=6)).isoformat()
-        end = now.isoformat()
+        start_dt = now - timedelta(hours=6)
+        end_dt = now
 
     conn = get_conn()
     init_db(conn)
 
-    # 直接从本地 DB 获取数据
-    items = query_by_time(start, end, limit=args.limit or 500, conn=conn)
+    # 直接从本地 DB 获取数据（传 datetime 对象，SQLite 会正确比较）
+    items = query_by_time(start_dt, end_dt, limit=args.limit or 500, conn=conn)
     conn.close()
 
     # URL 哈希去重 + 过滤中国媒体
@@ -149,8 +149,8 @@ def cmd_feed(args):
     output = {
         'api': 'feed',
         'query': {
-            'start': start,
-            'end': end,
+            'start': start_dt.isoformat(),
+            'end': end_dt.isoformat(),
             'generated_at': now.isoformat(),
         },
         'count': len(unique),
@@ -184,9 +184,25 @@ def cmd_search(args):
     """按关键字 + 时间范围搜索"""
     now = _now()
 
-    if not args.keyword:
-        _error("必须提供 --keyword 参数")
-        return
+    keyword = args.keyword
+
+    # 智能关键字提取（如果启用或检测到噪声）
+    keywords_used = [keyword]
+    if getattr(args, 'smart', False) or keyword.endswith('x') or keyword.endswith('X'):
+        try:
+            from local_llm_client import LocalLLMClient
+            llm = LocalLLMClient()
+            if llm.is_available():
+                result = llm.extract_search_entities(keyword)
+                keywords_used = result.get('keywords', [keyword.rstrip('x').rstrip('X').strip()])
+                print(f"[INFO] 智能提取关键词: {keywords_used}", file=sys.stderr)
+            else:
+                # fallback: 去除噪声字符
+                keywords_used = [keyword.rstrip('x').rstrip('X').strip()]
+                print(f"[INFO] 本地LLM不可用，使用清理后的关键词: {keywords_used}", file=sys.stderr)
+        except Exception as e:
+            keywords_used = [keyword.rstrip('x').rstrip('X').strip()]
+            print(f"[WARN] 智能提取失败: {e}", file=sys.stderr)
 
     if args.start:
         start = args.start
@@ -203,17 +219,29 @@ def cmd_search(args):
     conn = get_conn()
     init_db(conn)
 
-    items = query_by_keyword(
-        keyword=args.keyword,
-        start=start, end=end,
-        media_group=args.media or None,
-        country=args.country or None,
-        limit=args.limit or 200,
-        conn=conn
-    )
+    # 用多个关键词搜索并去重
+    all_items = []
+    seen_ids = set()
+    for kw in keywords_used[:5]:
+        items = query_by_keyword(
+            keyword=kw,
+            start=start, end=end,
+            media_group=args.media or None,
+            country=args.country or None,
+            limit=args.limit or 200,
+            conn=conn
+        )
+        for item in items:
+            if item['id'] not in seen_ids:
+                seen_ids.add(item['id'])
+                all_items.append(item)
+
     conn.close()
 
+    items = all_items
+
     # 2. 调用外部搜索引擎
+    primary_keyword = keywords_used[0] if keywords_used else keyword
     if not getattr(args, 'no_external', False):
         try:
             searcher = UnifiedSearcher()
@@ -225,7 +253,7 @@ def cmd_search(args):
 
             # 智能关键字优化
             ext_results = searcher.search(
-                args.keyword,
+                primary_keyword,
                 sources=sources,
                 max_results=args.ext_limit or 30,
                 hours=hours,
@@ -240,7 +268,7 @@ def cmd_search(args):
             # 入库机制: 存储新抓取的外部条目
             valid_ext = [r for r in ext_results if not is_chinese_media(r.get('platform', r.get('source', '')), r.get('url', ''))]
             if valid_ext:
-                upsert_external_articles(valid_ext, keyword_match=args.keyword)
+                upsert_external_articles(valid_ext, keyword_match=primary_keyword)
         except Exception as e:
             print(f"[WARN] 外部搜索失败: {e}", file=sys.stderr)
 
@@ -264,7 +292,9 @@ def cmd_search(args):
     output = {
         'api': 'search',
         'query': {
-            'keyword': args.keyword,
+            'keyword': keyword,
+            'keywords_extracted': keywords_used if len(keywords_used) > 1 else None,
+            'smart_search': getattr(args, 'smart', False),
             'start': start,
             'end': end,
             'hours': hours,
@@ -826,7 +856,8 @@ def main():
 
     # search
     p_search = sub.add_parser('search', help='关键字+时间搜索')
-    p_search.add_argument('--keyword', type=str, required=True, help='搜索关键字')
+    p_search.add_argument('--keyword', type=str, required=True, help='搜索关键字（支持智能提取）')
+    p_search.add_argument('--smart', action='store_true', help='启用智能关键字提取（自动提取国家、人物等实体）')
     p_search.add_argument('--hours', type=float, default=24, help='时间窗口（小时），默认24')
     p_search.add_argument('--start', type=str, help='起始时间 (ISO)')
     p_search.add_argument('--end', type=str, help='结束时间 (ISO)')

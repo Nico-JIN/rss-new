@@ -266,6 +266,27 @@ body {
     padding: 0 4px;
     font-size: 14px;
     opacity: 0.5;
+    transition: opacity 0.2s;
+}
+.feed-delete:hover {
+    opacity: 1;
+    color: var(--danger);
+}
+
+.feed-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 12px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    margin-left: 4px;
+}
+.feed-link:hover {
+    opacity: 1;
+    text-shadow: 0 0 8px var(--accent-glow);
+}
+    font-size: 14px;
+    opacity: 0.5;
     transition: opacity 0.15s;
 }
 
@@ -580,6 +601,69 @@ select.input { cursor: pointer; }
     border-radius: var(--radius-sm); font-size: 12px;
 }
 .fetch-item .count { font-weight: 600; }
+
+/* ── 每日抓取卡片 ────────────────────────────────────── */
+.daily-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.daily-stat-card {
+    background: var(--bg-primary);
+    border-radius: 10px;
+    padding: 16px 12px;
+    text-align: center;
+    border: 1px solid rgba(100, 116, 139, 0.2);
+    transition: all 0.2s ease;
+}
+
+.daily-stat-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+}
+
+.daily-stat-card .date {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.daily-stat-card .count {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.daily-stat-card .count.today {
+    color: #22d3ee;
+}
+
+.daily-stat-card .bar {
+    height: 4px;
+    background: rgba(100, 116, 139, 0.3);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.daily-stat-card .bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.daily-stat-card.today-card {
+    border-color: rgba(34, 211, 238, 0.4);
+    background: rgba(34, 211, 238, 0.05);
+}
+
+.daily-stat-card.today-card .bar-fill {
+    background: #22d3ee;
+}
 
 /* ── 科幻 HUD 样式 ────────────────────────────────────── */
 .hud-top {
@@ -1549,4 +1633,102 @@ select.input { cursor: pointer; }
     margin-top: 32px;
     padding-top: 20px;
     border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+/* ── 原文补抓控制卡片 ─────────────────────────────────────── */
+.backfill-control-card {
+    background: rgba(28, 31, 46, 0.7) !important;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(34, 197, 94, 0.2) !important;
+    padding: 20px !important;
+    margin-bottom: 24px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.bcc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.bcc-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.bcc-icon {
+    font-size: 24px;
+}
+
+.bcc-main-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.bcc-sub-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.bcc-stats {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.bcc-stats span {
+    color: var(--warning);
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.bcc-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bcc-controls {
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+}
+
+.bcc-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bcc-input-group label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bcc-input-group .input {
+    width: 120px;
+}
+
+.bcc-progress {
+    padding: 12px 16px;
+    background: rgba(34, 197, 94, 0.1);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--success);
+}
+
+.badge-manual {
+    background: rgba(99, 102, 241, 0.2);
+    color: var(--accent-2);
+}
+
+.badge-scheduled {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--success);
 }

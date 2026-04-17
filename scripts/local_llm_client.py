@@ -278,6 +278,64 @@ class LMStudioClient:
             return keywords[:max_keywords]
         return [query]
 
+    def extract_search_entities(self, query: str, model: str = None) -> dict:
+        """
+        从查询中提取关键实体（国家、人物、事件等）
+        返回可用于搜索的关键词列表
+        """
+        prompt = f"""
+用户输入的新闻搜索关键词是："{query}"
+
+请分析并提取其中的关键实体，用于优化搜索结果。
+输出 JSON 格式：
+{
+    "countries": ["提取的国家名（中英文）"],
+    "persons": ["提取的人物名"],
+    "organizations": ["提取的机构/组织名"],
+    "keywords": ["其他关键词"],
+    "clean_query": "去除噪声后的核心查询词"
+}
+
+示例：
+输入："匈牙利x" → {"countries": ["匈牙利", "Hungary"], "clean_query": "匈牙利", ...}
+输入："特朗普最新新闻" → {"persons": ["特朗普", "Trump"], "keywords": ["最新", "新闻"], "clean_query": "特朗普"}
+输入："中美贸易战2024" → {"countries": ["中国", "美国", "China", "US"], "keywords": ["贸易战", "2024"], ...}
+
+要求：
+1. 直接输出 JSON，不要代码块标记
+2. 国家名必须包含中英文版本
+3. 如果输入有噪声字符（如"x"、"空格"等），在 clean_query 中去除
+"""
+        res = self.generate(prompt, model=model, temperature=0.3)
+        if 'response' in res:
+            try:
+                text = res['response'].strip()
+                text = re.sub(r'^```json\s*', '', text)
+                text = re.sub(r'^```\s*', '', text)
+                text = re.sub(r'\s*```$', '', text)
+                data = json.loads(text)
+                # 合并所有提取的关键词
+                all_keywords = []
+                all_keywords.extend(data.get('countries', []))
+                all_keywords.extend(data.get('persons', []))
+                all_keywords.extend(data.get('organizations', []))
+                all_keywords.extend(data.get('keywords', []))
+                if data.get('clean_query'):
+                    all_keywords.append(data['clean_query'])
+                # 去重并限制数量
+                unique_keywords = list(set(all_keywords))[:15]
+                return {
+                    'keywords': unique_keywords,
+                    'entities': data
+                }
+            except json.JSONDecodeError:
+                # JSON 解析失败，简单清理噪声字符
+                cleaned = query.rstrip('x').rstrip('X').strip()
+                return {'keywords': [cleaned] if cleaned else [query], 'entities': {}}
+        # LLM 返回错误，使用简单清理
+        cleaned = query.rstrip('x').rstrip('X').strip()
+        return {'keywords': [cleaned] if cleaned else [query], 'error': res.get('error')}
+
 
 # ═══════════════════════════════════════════════════════════════════
 # 统一客户端工厂
@@ -307,8 +365,16 @@ class LocalLLMClient:
             # 默认 Ollama
             url = base_url or config.get('ollama_base_url', 'http://localhost:11434')
             mdl = model or config.get('ollama_model', 'qwen2.5:7b')
-            # 导入 OllamaClient
-            from ollama_helper import OllamaClient
+            # 动态导入 OllamaClient
+            try:
+                from ollama_helper import OllamaClient
+            except ImportError:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("ollama_helper",
+                    Path(__file__).parent / "ollama_helper.py")
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                OllamaClient = module.OllamaClient
             self._client = OllamaClient(base_url=url)
             self._ollama_model = mdl
 
@@ -355,6 +421,13 @@ class LocalLLMClient:
         if self.provider == 'ollama':
             model = model or self._ollama_model
         return self._client.smart_search_keywords(query, max_keywords, model=model)
+
+    def extract_search_entities(self, query: str, model: str = None) -> dict:
+        """从查询中提取关键实体（国家、人物等）"""
+        if self.provider == 'ollama':
+            model = model or self._ollama_model
+            return self._client.extract_search_entities(model, query)
+        return self._client.extract_search_entities(query, model=model)
 
 
 def get_local_llm() -> LocalLLMClient:

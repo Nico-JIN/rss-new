@@ -55,6 +55,78 @@ def get_chinese_domestic_media() -> set:
     return set(m.lower() for m in media_list)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ISO 国家代码映射
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# 中文国家名到 ISO 代码的映射（补充 category_rules.yaml 中的映射）
+CHINA_TO_ISO = {
+    "中国大陆": "CN", "中国": "CN",
+    "美国": "US", "美方": "US",
+    "日本": "JP", "日方": "JP",
+    "中国香港": "HK", "香港": "HK",
+    "中国台湾": "TW", "台湾": "TW",
+    "中国澳门": "MO", "澳门": "MO",
+    "韩国": "KR", "南韩": "KR",
+    "印度": "IN",
+    "新加坡": "SG",
+    "马来西亚": "MY",
+    "泰国": "TH",
+    "越南": "VN",
+    "菲律宾": "PH",
+    "印尼": "ID", "印度尼西亚": "ID",
+    "巴基斯坦": "PK",
+    "孟加拉": "BD",
+    "斯里兰卡": "LK",
+    "尼泊尔": "NP",
+    "缅甸": "MM",
+    "柬埔寨": "KH",
+    "老挝": "LA",
+    "文莱": "BN",
+    "蒙古": "MN",
+    "哈萨克": "KZ", "哈萨克斯坦": "KZ",
+    "乌兹别克": "UZ", "乌兹别克斯坦": "UZ",
+    "阿富汗": "AF",
+    "以色列": "IL",
+    "巴勒斯坦": "PS",
+    "伊朗": "IR",
+    "沙特": "SA", "沙特阿拉伯": "SA",
+    "土耳其": "TR",
+    "伊拉克": "IQ",
+    "叙利亚": "SY",
+    "也门": "YE",
+    "黎巴嫩": "LB",
+    "埃及": "EG",
+    "约旦": "JO",
+    "科威特": "KW",
+    "阿联酋": "AE",
+    "卡塔尔": "QA",
+    "巴林": "BH",
+    "阿曼": "OM",
+    "英国": "GB", "英方": "GB",
+    "德国": "DE",
+    "法国": "FR",
+    "俄罗斯": "RU", "俄方": "RU",
+    "国际": "INTL",
+}
+
+
+def normalize_country(country: str) -> str:
+    """将国家名标准化为 ISO 代码"""
+    if not country:
+        return ""
+    # 已经是 ISO 代码
+    if country in ["CN", "US", "JP", "HK", "TW", "MO", "KR", "IN", "SG",
+                   "MY", "TH", "VN", "PH", "ID", "PK", "BD", "LK", "NP",
+                   "MM", "KH", "LA", "BN", "MN", "KZ", "UZ", "AF",
+                   "IL", "PS", "IR", "SA", "TR", "IQ", "SY", "YE", "LB",
+                   "EG", "JO", "KW", "AE", "QA", "BH", "OM",
+                   "GB", "DE", "FR", "RU", "INTL"]:
+        return country
+    # 中文映射
+    return CHINA_TO_ISO.get(country, country)
+
+
 def get_category_definitions() -> dict:
     """获取分类定义"""
     cfg = load_category_rules()
@@ -106,6 +178,10 @@ def classify_hotspot(hotspot: dict, s_tier_sources: set = None) -> list[str]:
     sources = hotspot.get("sources", [])
     s_tier_count = hotspot.get("s_tier_count", 0)
     entities = hotspot.get("entities", [])
+
+    # ── 标准化国家代码 ──
+    primary_country = normalize_country(primary_country)
+    related_countries = [normalize_country(c) for c in related_countries]
 
     # 判断媒体级别
     max_tier = "S" if s_tier_count > 0 else "B"

@@ -107,6 +107,10 @@
                     <div class="stat-value" id="statWeek">—</div>
                     <div class="stat-label">本周新增</div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statDailyAvg">—</div>
+                    <div class="stat-label">日均抓取(近7天)</div>
+                </div>
                 <div class="stat-card" onclick="gotoFiltered('last_fetch')">
                     <div class="stat-value" id="statLastFetch">—</div>
                     <div class="stat-label">上次抓取</div>
@@ -118,15 +122,19 @@
             </div>
             <div class="charts-row">
                 <div class="card chart-card">
-                    <h3>各媒体源文章数</h3>
+                    <h3>各媒体源文章数 <span style="font-size:12px;color:var(--text-secondary);">(Top 20)</span></h3>
                     <div class="chart-container">
                         <canvas id="mediaChart"></canvas>
                     </div>
                 </div>
                 <div class="card">
-                    <h3>最近抓取记录</h3>
-                    <div id="recentFetchList" class="fetch-list"></div>
+                    <h3>每日抓取量 (近7天)</h3>
+                    <div id="dailyStatsCards" class="daily-stats-grid"></div>
                 </div>
+            </div>
+            <div class="card" style="margin-top:16px;">
+                <h3>最近抓取记录</h3>
+                <div id="recentFetchList" class="fetch-list"></div>
             </div>
         </section>
 
@@ -242,6 +250,10 @@
                             <option value="month">最近一月</option>
                         </select>
                         <input type="number" id="searchHours" class="input" placeholder="近 N 小时" style="flex:0.5">
+                        <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text-secondary); white-space:nowrap;">
+                            <input type="checkbox" id="smartSearch" style="width:14px; height:14px;">
+                            智能提取
+                        </label>
                         <button class="btn btn-primary" id="btnSearch" style="flex:1">
                             <span>🔍</span> 搜索本地
                         </button>
@@ -406,6 +418,72 @@
                 <h1>抓取日志</h1>
                 <button class="btn btn-secondary" id="btnRefreshLogs">🔄 刷新</button>
             </div>
+
+            <!-- 原文补抓控制 -->
+            <div class="card backfill-control-card">
+                <div class="bcc-header">
+                    <div class="bcc-title">
+                        <span class="bcc-icon">📄</span>
+                        <div class="bcc-labels">
+                            <div class="bcc-main-label">原文补抓</div>
+                            <div class="bcc-sub-label">ORIGINAL CONTENT BACKFILL</div>
+                        </div>
+                    </div>
+                    <div class="bcc-stats">
+                        <span id="backfillMissing">—</span> 篇待补抓
+                    </div>
+                </div>
+                <div class="bcc-body">
+                    <div class="bcc-controls">
+                        <div class="bcc-input-group">
+                            <label>补抓天数</label>
+                            <select id="backfillDays" class="input">
+                                <option value="1">最近1天</option>
+                                <option value="3">最近3天</option>
+                                <option value="7">最近7天</option>
+                            </select>
+                        </div>
+                        <div class="bcc-input-group">
+                            <label>最大数量</label>
+                            <select id="backfillLimit" class="input">
+                                <option value="100">100篇</option>
+                                <option value="200" selected>200篇</option>
+                                <option value="500">500篇</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="btnRunBackfill" onclick="runBackfill()">
+                            ▶️ 执行补抓
+                        </button>
+                    </div>
+                    <div id="backfillProgress" class="bcc-progress" style="display:none">
+                        <span id="backfillProgressText">准备中...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原文补抓日志 -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>📋 补抓执行记录</h3>
+                    <button class="btn btn-sm btn-secondary" onclick="loadBackfillLogs()">刷新</button>
+                </div>
+                <table class="data-table" id="backfillLogsTable">
+                    <thead>
+                        <tr>
+                            <th>开始时间</th>
+                            <th>触发方式</th>
+                            <th>状态</th>
+                            <th>耗时</th>
+                            <th>成功</th>
+                            <th>失败</th>
+                            <th>跳过</th>
+                            <th>详情</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
             <div class="card">
                 <div class="fetch-status-bar" id="fetchStatusBar">
                     <div class="status-item">

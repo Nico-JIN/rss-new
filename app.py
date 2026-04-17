@@ -21,6 +21,8 @@ CFG_PATH = BASE / "config" / "feeds.yaml"
 WEB_DIR = BASE / "web"
 TZ_BJ = timezone(timedelta(hours=8))
 
+import sqlite3
+
 sys.path.insert(0, str(SCRIPTS))
 from store import (
     init_db, get_conn, upsert_articles,
@@ -342,6 +344,68 @@ def api_delete_feed(idx):
 
 
 # ── API: 文章查询 ─────────────────────────────────────────
+
+@app.route('/api/articles/smart-search', methods=['GET'])
+def api_articles_smart_search():
+    """智能搜索：使用本地LLM提取实体后搜索"""
+    query = request.args.get('query', '').strip()
+    start = request.args.get('start', '')
+    end = request.args.get('end', '')
+    media = request.args.get('media', '').strip()
+    platform = request.args.get('platform', '').strip()
+    country = request.args.get('country', '').strip()
+    limit = min(int(request.args.get('limit', 100)), 500)
+    page = max(int(request.args.get('page', 1)), 1)
+    offset_val = (page - 1) * limit
+
+    if not query:
+        return jsonify({'error': '请输入搜索关键词'}), 400
+
+    # 使用本地LLM提取实体
+    try:
+        from local_llm_client import LocalLLMClient
+        llm = LocalLLMClient()
+        if llm.is_available():
+            result = llm.extract_search_entities(query)
+            keywords = result.get('keywords', [query])
+        else:
+            # 本地LLM不可用，简单处理：去除噪声字符
+            keywords = [query.rstrip('x').rstrip('X').strip()]
+    except Exception as e:
+        keywords = [query.rstrip('x').rstrip('X').strip()]
+
+    # 用多个关键词搜索
+    conn = get_conn()
+    all_items = []
+    seen_ids = set()
+
+    for kw in keywords[:5]:  # 只用前5个关键词
+        items = query_by_keyword(
+            kw, start=start or None, end=end or None,
+            media_group=media or None, platform=platform or None, country=country or None,
+            limit=limit, conn=conn)
+        for item in items:
+            if item['id'] not in seen_ids:
+                seen_ids.add(item['id'])
+                all_items.append(item)
+
+    # 按时间排序并限制数量
+    all_items.sort(key=lambda x: x.get('published', ''), reverse=True)
+    items = all_items[:limit]
+
+    conn.close()
+
+    internal = {'url_hash', 'title_hash', 'created_at'}
+    clean_items = [{k: v for k, v in dict(i).items() if k not in internal} for i in items]
+
+    return jsonify({
+        'count': len(clean_items),
+        'total': len(all_items),
+        'keywords_used': keywords[:5],
+        'page': page,
+        'items': clean_items
+    })
+
 
 @app.route('/api/articles', methods=['GET'])
 def api_articles():
@@ -2480,6 +2544,159 @@ def api_v2_external_engines():
     return jsonify({
         'engines': engines,
         'count': len(engines)
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 原文补抓 API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+backfill_state = {
+    'is_running': False,
+    'progress': '',
+    'last_result': None,
+}
+
+
+@app.route('/api/backfill/status', methods=['GET'])
+def api_backfill_status():
+    """获取补抓任务状态"""
+    conn = get_conn()
+    conn.row_factory = sqlite3.Row
+
+    # 获取最近的执行记录
+    cursor = conn.execute('''
+        SELECT * FROM backfill_logs
+        ORDER BY started_at DESC
+        LIMIT 1
+    ''')
+    last_log = cursor.fetchone()
+    conn.close()
+
+    return jsonify({
+        'is_running': backfill_state['is_running'],
+        'progress': backfill_state['progress'],
+        'last_result': dict(last_log) if last_log else None
+    })
+
+
+@app.route('/api/backfill/execute', methods=['POST'])
+def api_backfill_execute():
+    """手动执行补抓任务"""
+    if backfill_state['is_running']:
+        return jsonify({'error': '补抓任务正在运行中'}), 400
+
+    data = request.get_json() or {}
+    days = data.get('days', 1)
+    limit = data.get('limit', 200)
+
+    def run_backfill_async():
+        try:
+            backfill_state['is_running'] = True
+            backfill_state['progress'] = '正在检查需要补抓的文章...'
+
+            sys.path.insert(0, str(SCRIPTS))
+            from backfill_original_content import run_backfill
+
+            backfill_state['progress'] = f'正在补抓最近 {days} 天的文章...'
+            result = run_backfill(days=days, limit=limit, trigger_type='manual')
+
+            backfill_state['last_result'] = result
+            backfill_state['progress'] = f'完成: 成功 {result["success"]} 篇, 失败 {result["failed"]} 篇'
+        except Exception as e:
+            backfill_state['progress'] = f'错误: {str(e)}'
+        finally:
+            backfill_state['is_running'] = False
+
+    # 异步执行
+    thread = threading.Thread(target=run_backfill_async)
+    thread.start()
+
+    return jsonify({
+        'message': '补抓任务已启动',
+        'days': days,
+        'limit': limit
+    })
+
+
+@app.route('/api/backfill/logs', methods=['GET'])
+def api_backfill_logs():
+    """获取补抓执行日志"""
+    limit = request.args.get('limit', 20, type=int)
+
+    conn = get_conn()
+    conn.row_factory = sqlite3.Row
+
+    cursor = conn.execute('''
+        SELECT * FROM backfill_logs
+        ORDER BY started_at DESC
+        LIMIT ?
+    ''', (limit,))
+    logs = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    # 解析 JSON 字段
+    for log in logs:
+        if log.get('by_method'):
+            try:
+                log['by_method'] = json.loads(log['by_method'])
+            except:
+                log['by_method'] = {}
+        if log.get('by_platform'):
+            try:
+                log['by_platform'] = json.loads(log['by_platform'])
+            except:
+                log['by_platform'] = {}
+
+    return jsonify({
+        'logs': logs,
+        'count': len(logs)
+    })
+
+
+@app.route('/api/backfill/stats', methods=['GET'])
+def api_backfill_stats():
+    """获取补抓统计信息"""
+    days = request.args.get('days', 7, type=int)
+
+    conn = get_conn()
+    conn.row_factory = sqlite3.Row
+
+    # 最近N天的执行统计
+    cursor = conn.execute('''
+        SELECT
+            COUNT(*) as total_runs,
+            SUM(success_count) as total_success,
+            SUM(failed_count) as total_failed,
+            SUM(skipped_count) as total_skipped,
+            AVG(duration_seconds) as avg_duration,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_runs,
+            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_runs
+        FROM backfill_logs
+        WHERE started_at >= datetime('now', ?)
+    ''', (f'-{days} days',))
+    stats = cursor.fetchone()
+
+    # 当前缺少原文的文章数
+    cursor = conn.execute('''
+        SELECT COUNT(*) as cnt FROM articles
+        WHERE published >= datetime('now', '-1 day')
+        AND (original_content = '' OR original_content IS NULL OR LENGTH(original_content) < 50)
+    ''')
+    missing_count = cursor.fetchone()['cnt']
+
+    conn.close()
+
+    return jsonify({
+        'period_days': days,
+        'total_runs': stats['total_runs'] or 0,
+        'total_success': stats['total_success'] or 0,
+        'total_failed': stats['total_failed'] or 0,
+        'total_skipped': stats['total_skipped'] or 0,
+        'avg_duration': round(stats['avg_duration'] or 0, 1),
+        'success_runs': stats['success_runs'] or 0,
+        'failed_runs': stats['failed_runs'] or 0,
+        'missing_original_count': missing_count
     })
 
 

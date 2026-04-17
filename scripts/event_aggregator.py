@@ -340,17 +340,20 @@ def aggregate_hotspots(
         # 条件：
         # - 至少2家不同媒体报道，或
         # - 至少3篇文章聚合（同一事件）
+        # 特殊放宽：港澳台(HK/TW/MO)允许单篇文章成为热点
         # 注意：单篇S级媒体报道不足以成为热点，必须有多家报道
+
+        # 先判断主体国家
+        primary_country = max(country_votes, key=country_votes.get) if country_votes else "INTL"
+
         is_hot = (
             len(unique_sources) >= 2 or  # 至少2家媒体报道
-            len(group_articles) >= scoring_cfg.get("min_articles", 3)  # 至少3篇文章
+            len(group_articles) >= scoring_cfg.get("min_articles", 3) or  # 至少3篇文章
+            primary_country in ("HK", "TW", "MO")  # 港澳台放宽：单篇即可
         )
 
         if not is_hot:
             continue
-
-        # 确定主体国家（投票）
-        primary_country = max(country_votes, key=country_votes.get) if country_votes else "INTL"
 
         # 选代表性标题（S 级优先）
         rep_article = None

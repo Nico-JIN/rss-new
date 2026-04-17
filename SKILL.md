@@ -95,9 +95,43 @@ python scripts/scheduled_hotspot.py --type asia_other --hours 24 --simple
 # 基础搜索
 python scripts/api_cli.py search --keyword "Trump" --hours 24
 
+# 智能搜索（自动提取国家、人物等实体）
+python scripts/api_cli.py search --keyword "匈牙利x" --smart --hours 24
+
 # 仅本地库
 python scripts/api_cli.py search --keyword "中国" --hours 6 --no-external
 ```
+
+**输出格式**：
+```json
+{
+  "api": "search",
+  "query": {
+    "keyword": "匈牙利x",
+    "keywords_extracted": ["匈牙利", "Hungary"],
+    "smart_search": true,
+    "hours": 24,
+    "generated_at": "2026-04-13T..."
+  },
+  "count": 25,
+  "items": [
+    {
+      "title": "匈牙利总理欧尔班...",
+      "url": "https://...",
+      "platform": "路透社|x.com",
+      "published": "2026-04-13T...",
+      "summary": "匈牙利总理欧尔班的选举失败...",
+      "image": "https://..."
+    }
+  ]
+}
+```
+
+**智能搜索说明**：
+- 自动去除噪声字符（如 "x"、"空格"）
+- 提取国家中英文（"匈牙利" → ["匈牙利", "Hungary"]）
+- 提取人物名（"特朗普" → ["特朗普", "Trump"]）
+- 多关键词搜索并去重，返回所有相关新闻
 
 ---
 
@@ -127,6 +161,7 @@ python scripts/api_cli.py search --keyword "中国" --hours 6 --no-external
 | 美国新闻热点 | `python scripts/scheduled_hotspot.py --type us_news --hours 6 --simple` |
 | 中东新闻热点 | `python scripts/scheduled_hotspot.py --type middle_east --hours 12 --simple` |
 | 搜索某主题 | `python scripts/api_cli.py search --keyword "主题" --hours 24` |
+| 智能搜索（提取国家/人物） | `python scripts/api_cli.py search --keyword "匈牙利x" --smart --hours 24` |
 
 ---
 

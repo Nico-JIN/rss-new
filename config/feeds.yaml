@@ -1,7 +1,7 @@
 external_sources:
 - category: 社交媒体
   config:
-    api_key_ref: new1_5b6d85470985409db615a790af404fd6
+    api_key_ref: new1_7ff3150a771b422d9506836c5e372a71
     max_results: 20
     sort_order: Latest
   description: Twitter/X 推文搜索
@@ -30,11 +30,20 @@ external_sources:
 - category: 搜索引擎
   config:
     api_key_ref: 4f1a15e046ad9bf9cc9554da215c1cfc1ec37dff1a2c4b4d38793872b2e058f8
-    country: US
-    lang: en
-  description: Google News API (SerpApi)
+    country: CN
+    lang: zh-CN
+  description: Google News API (SerpApi) - 中文搜索
   enabled: true
   name: Google News
+  type: search_engine
+- category: 搜索引擎
+  config:
+    api_key_ref: 4f1a15e046ad9bf9cc9554da215c1cfc1ec37dff1a2c4b4d38793872b2e058f8
+    country: US
+    lang: en
+  description: Google News API (SerpApi) - 英文搜索
+  enabled: true
+  name: Google News EN
   type: search_engine
 - category: 搜索引擎
   config:
@@ -102,7 +111,7 @@ feeds:
   is_s_tier: true
   media_group: PBS
   platform: PBS|美国政治
-  scrape_url: ''
+  scrape_url: https://www.pbs.org/newshour/world
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/tR6OOiFleWnfeWvJ.xml
@@ -111,6 +120,7 @@ feeds:
   is_s_tier: true
   media_group: 路透社
   platform: 路透社|China
+  scrape_url: https://www.reuters.com/world/
   timeout: 30
   url: https://rss.app/feeds/GoaYdKMysAJ2wh0N.xml
 - city: 伦敦
@@ -119,7 +129,7 @@ feeds:
   is_s_tier: true
   media_group: 路透社
   platform: 路透社|US
-  scrape_url: ''
+  scrape_url: https://www.reuters.com/world/
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/3SzXJwOJT9A9HLic.xml
@@ -128,6 +138,7 @@ feeds:
   is_s_tier: false
   media_group: 路透社
   platform: 路透社|x.com
+  scrape_url: https://www.reuters.com/world/
   timeout: 30
   url: https://rss.app/feeds/pxSbEqhWbTfVocb4.xml
 - city: 东京
@@ -135,6 +146,7 @@ feeds:
   is_s_tier: true
   media_group: 路透社
   platform: 路透社|Japan
+  scrape_url: https://www.reuters.com/world/
   timeout: 30
   url: https://rss.app/feeds/cCw9aLOr3IJQImEl.xml
 - city: 北京
@@ -143,7 +155,7 @@ feeds:
   is_s_tier: true
   media_group: 纽约时报
   platform: 纽约时报|China
-  scrape_url: ''
+  scrape_url: https://www.nytimes.com/section/world
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/vO1vKL4xXqrKIWab.xml
@@ -151,36 +163,42 @@ feeds:
   country: 美国
   media_group: 纽约时报
   platform: 纽约时报|官网
+  scrape_url: https://www.nytimes.com/section/world
   timeout: 30
   url: https://rss.app/feeds/MhUGsT90ZRDAUPyH.xml
 - city: 纽约
   country: 美国
   media_group: CNN
   platform: CNN|World
+  scrape_url: https://edition.cnn.com/world
   timeout: 30
   url: https://rss.app/feeds/vrnuIYnatTBL2WKe.xml
 - city: 北京
   country: 美国
   media_group: CNN
   platform: CNN|China
+  scrape_url: https://edition.cnn.com/world
   timeout: 30
   url: https://rss.app/feeds/e6Epd6MGVavZouJl.xml
 - city: 华盛顿
   country: 美国
   media_group: 华盛顿邮报
   platform: 华盛顿邮报|White House
+  scrape_url: https://www.washingtonpost.com/world/
   timeout: 30
   url: https://rss.app/feeds/MYOaR8UWegn5jyfc.xml
 - city: 华盛顿
   country: 美国
   media_group: 华盛顿邮报
   platform: 华盛顿邮报|White House
+  scrape_url: https://www.washingtonpost.com/world/
   timeout: 30
   url: https://rss.app/feeds/ls6F732pV7N93OmE.xml
 - city: 华盛顿
   country: 美国
   media_group: 华盛顿邮报
   platform: 华盛顿邮报|Opinions
+  scrape_url: https://www.washingtonpost.com/world/
   timeout: 30
   url: https://rss.app/feeds/6MgtxEEQL3RAsMlL.xml
 - city: 华盛顿
@@ -189,7 +207,7 @@ feeds:
   is_s_tier: true
   media_group: 美国众议院
   platform: 美国众议院
-  scrape_url: ''
+  scrape_url: https://www.house.gov
   time_only: true
   timeout: 30
   url: https://rss.app/feeds/8gETqnSSE4IFWMuZ.xml
@@ -209,7 +227,7 @@ feeds:
   is_s_tier: true
   media_group: 共同社
   platform: 共同社
-  scrape_url: ''
+  scrape_url: https://nordot.app/-/media/kyodonews
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/O4AiW7fxDN6C6H5D.xml
@@ -217,12 +235,14 @@ feeds:
   country: 英国
   media_group: BBC
   platform: BBC|x.com
+  scrape_url: https://www.bbc.com/news
   timeout: 30
   url: https://rss.app/feeds/9Rx7qXQGKoV0q4Dl.xml
 - city: 伦敦
   country: 英国
   media_group: BBC
   platform: BBC|Google News
+  scrape_url: https://www.bbc.com/news
   timeout: 30
   url: https://rss.app/feeds/yNjx9c29THw4aj5p.xml
 - city: 东京
@@ -256,7 +276,7 @@ feeds:
   is_s_tier: true
   media_group: 纽约时报
   platform: 纽约时报
-  scrape_url: ''
+  scrape_url: https://www.nytimes.com/section/world
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/EdaqV6KSPoxu0eya.xml
@@ -304,7 +324,7 @@ feeds:
   fetch_jina: false
   media_group: Reddit
   platform: Reddit
-  scrape_url: ''
+  scrape_url: https://www.reddit.com
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/w9ef4t0gJ9SpXZYa.xml
@@ -323,7 +343,7 @@ feeds:
   fetch_jina: false
   media_group: 德国之声
   platform: 德国之声|DW
-  scrape_url: ''
+  scrape_url: https://www.dw.com/en/top-stories/s-1429
   time_only: true
   timeout: 30
   url: https://rss.app/feeds/GMpPodY6W12Tx9TH.xml
@@ -359,7 +379,7 @@ feeds:
   fetch_jina: false
   media_group: Scripps News
   platform: Scripps News
-  scrape_url: ''
+  scrape_url: https://scrippsnews.com
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/DLGSvXLP2JNT057e.xml
@@ -368,7 +388,7 @@ feeds:
   fetch_jina: false
   media_group: CBC
   platform: 加拿大广播公司
-  scrape_url: ''
+  scrape_url: https://www.cbc.ca/news/world
   time_only: true
   timeout: 30
   url: https://rss.app/feeds/yAK0fJFS20dISNCL.xml
@@ -435,7 +455,7 @@ feeds:
   fetch_jina: false
   media_group: BBC
   platform: BBC|@BBCBreaking
-  scrape_url: ''
+  scrape_url: https://www.bbc.com/news
   time_only: true
   timeout: 30
   url: https://rss.app/feeds/mIj4qUMHZGEpYvXn.xml
@@ -444,7 +464,7 @@ feeds:
   fetch_jina: false
   media_group: CNN
   platform: CNN|X.COM
-  scrape_url: ''
+  scrape_url: https://edition.cnn.com/world
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/Lndp9pfheU9lQH41.xml
@@ -482,7 +502,7 @@ feeds:
   fetch_jina: false
   media_group: 日本媒体
   platform: 产经新闻|中国
-  scrape_url: ''
+  scrape_url: https://www3.nhk.or.jp/nhkworld/
   time_only: true
   timeout: 30
   url: https://rss.app/feeds/yt5HYP5wpT0hm4Hn.xml
@@ -501,7 +521,7 @@ feeds:
   is_s_tier: true
   media_group: 台湾媒体
   platform: 中央通讯社（CNA）
-  scrape_url: ''
+  scrape_url: https://www.cna.com.tw
   time_only: false
   timeout: 30
   url: https://rss.app/feeds/8y3umCenIv4Ds4XX.xml

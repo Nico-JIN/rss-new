@@ -129,7 +129,7 @@ categories:
     min_articles: 2
     min_media_count: 2
     name: 亚洲周边国家
-    schedule: 0 */4 * * *
+    schedule: 0 */2 * * *
     similarity_threshold: 0.3
   china_related:
     description: 外国媒体对中国大陆的报道（不含港澳台）
@@ -216,7 +216,7 @@ categories:
     min_articles: 2
     min_media_count: 2
     name: 外媒报道中国
-    schedule: 0 */4 * * *
+    schedule: 0 */2 * * *
     similarity_threshold: 0.3
   hk_tw_macau:
     description: 香港、台湾、澳门政治与社会新闻（区别于中国大陆）
@@ -292,7 +292,7 @@ categories:
     min_articles: 2
     min_media_count: 2
     name: 港澳台新闻
-    schedule: 0 */4 * * *
+    schedule: 0 */2 * * *
     similarity_threshold: 0.28
   japan_news:
     description: 日本政治、经济、军事、外交新闻
@@ -392,7 +392,7 @@ categories:
     min_articles: 2
     min_media_count: 2
     name: 日本新闻
-    schedule: 0 */6 * * *
+    schedule: 0 */2 * * *
     similarity_threshold: 0.25
   middle_east:
     description: 中东地区冲突、石油、外交新闻
@@ -500,7 +500,7 @@ categories:
     min_articles: 2
     min_media_count: 2
     name: 中东新闻
-    schedule: 0 */4 * * *
+    schedule: 0 */2 * * *
     similarity_threshold: 0.3
   us_news:
     description: 美国内政、外交、军事、经济新闻
@@ -611,7 +611,7 @@ categories:
     min_articles: 1
     min_media_count: 2
     name: 美国新闻
-    schedule: 0 */6 * * *
+    schedule: 0 */2 * * *
     similarity_threshold: 0.35
 settings:
   default_hours: 24

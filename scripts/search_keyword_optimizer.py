@@ -114,6 +114,14 @@ def get_time_description(hours: int, language: str = "en") -> Dict:
 # 关键字优化（无LLM版本）
 # ═══════════════════════════════════════════════════════════════════
 
+def is_chinese_keyword(keyword: str) -> bool:
+    """检测关键词是否包含中文字符"""
+    for char in keyword:
+        if '\u4e00' <= char <= '\u9fff':
+            return True
+    return False
+
+
 def optimize_keyword_simple(keyword: str, hours: int,
                             engine: str) -> Dict:
     """
@@ -126,6 +134,9 @@ def optimize_keyword_simple(keyword: str, hours: int,
 
     # 引擎类型分类
     engine_type = get_engine_type(engine)
+
+    # 检测是否为中文关键词
+    is_chinese = is_chinese_keyword(keyword)
 
     result = {
         "original_keyword": keyword,
@@ -147,8 +158,13 @@ def optimize_keyword_simple(keyword: str, hours: int,
 
     else:
         # Google/Bing 等：关键字加时间词
-        time_terms = " ".join(time_desc["search_terms"][:2])
-        result["optimized_keyword"] = f"{keyword} {time_desc['natural']} {time_terms}"
+        if is_chinese:
+            # 中文关键词：添加中文时间词
+            result["optimized_keyword"] = f"{keyword} {time_desc_zh['natural']}"
+        else:
+            # 英文关键词：添加英文时间词
+            time_terms = " ".join(time_desc["search_terms"][:2])
+            result["optimized_keyword"] = f"{keyword} {time_desc['natural']} {time_terms}"
         result["use_time_param"] = False
 
     return result

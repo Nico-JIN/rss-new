@@ -214,6 +214,27 @@ def init_db(conn=None):
         );
         CREATE INDEX IF NOT EXISTS idx_scheduled_hotspots_category ON scheduled_hotspots(category_id);
         CREATE INDEX IF NOT EXISTS idx_scheduled_hotspots_executed ON scheduled_hotspots(executed_at);
+
+        -- 原文补抓执行记录表
+        CREATE TABLE IF NOT EXISTS backfill_logs (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at      TEXT NOT NULL,
+            finished_at     TEXT,
+            status          TEXT DEFAULT 'running',
+            duration_seconds INTEGER DEFAULT 0,
+            days_back       INTEGER DEFAULT 1,
+            total_articles  INTEGER DEFAULT 0,
+            success_count   INTEGER DEFAULT 0,
+            failed_count    INTEGER DEFAULT 0,
+            skipped_count   INTEGER DEFAULT 0,
+            by_method       TEXT DEFAULT '{}',
+            by_platform     TEXT DEFAULT '{}',
+            error_message   TEXT DEFAULT '',
+            trigger_type    TEXT DEFAULT 'scheduled',
+            created_at      TEXT DEFAULT (datetime('now', '+8 hours'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_backfill_logs_started ON backfill_logs(started_at);
+        CREATE INDEX IF NOT EXISTS idx_backfill_logs_status ON backfill_logs(status);
     """)
 
     # 迁移：为现有表添加新字段
@@ -291,13 +312,15 @@ def upsert_articles(items: list[dict], conn=None):
             item.setdefault('llm_tags', '[]')
             item.setdefault('video', '')
             item.setdefault('media_tier', 'B')
+            item.setdefault('original_title', '')
+            item.setdefault('original_content', '')
 
         # 使用 UPSERT 语法：冲突时如果旧记录没图，则更新图片
         sql = """
             INSERT INTO articles
-                (url_hash, title_hash, url, title, platform, media_group, country, published, summary, content, image, video, llm_tags, media_tier)
+                (url_hash, title_hash, url, title, original_title, original_content, platform, media_group, country, published, summary, content, image, video, llm_tags, media_tier)
             VALUES
-                (:url_hash, :title_hash, :url, :title, :platform, :media_group, :country, :published, :summary, :content, :image, :video, :llm_tags, :media_tier)
+                (:url_hash, :title_hash, :url, :title, :original_title, :original_content, :platform, :media_group, :country, :published, :summary, :content, :image, :video, :llm_tags, :media_tier)
             ON CONFLICT(url_hash) DO UPDATE SET
                 image = CASE WHEN (image IS NULL OR image = '') THEN excluded.image ELSE image END,
                 video = CASE WHEN (video IS NULL OR video = '') THEN excluded.video ELSE video END,
@@ -318,17 +341,25 @@ def upsert_articles(items: list[dict], conn=None):
     return _retry_on_locked(_insert)
 
 
-def query_by_time(start: str, end: str, media_group=None, platform=None, country=None, limit=200, offset=0, conn=None):
-    """按时间范围查询。start/end 为 None 时不加时间过滤（全量查询）。"""
+def query_by_time(start, end, media_group=None, platform=None, country=None, limit=200, offset=0, conn=None):
+    """按时间范围查询。start/end 支持字符串或 datetime 对象，为 None 时不加时间过滤（全量查询）。"""
+    from datetime import datetime
     c = conn or get_conn()
     sql = "SELECT * FROM articles WHERE 1=1"
     params = []
+    # 自动转换 datetime 为 ISO 字符串
     if start:
         sql += " AND published >= ?"
-        params.append(start)
+        if isinstance(start, datetime):
+            params.append(start.isoformat())
+        else:
+            params.append(start)
     if end:
         sql += " AND published <= ?"
-        params.append(end)
+        if isinstance(end, datetime):
+            params.append(end.isoformat())
+        else:
+            params.append(end)
     if media_group:
         sql += " AND media_group = ?"
         params.append(media_group)
@@ -348,44 +379,51 @@ def query_by_time(start: str, end: str, media_group=None, platform=None, country
 
 
 def query_by_keyword(keyword: str, start=None, end=None, media_group=None, platform=None, country=None,
-                     limit=100, offset=0, conn=None):
+                     limit=100, offset=0, conn=None, match_mode='or'):
     """
     按关键字模糊搜索（title + summary）
 
-    注意：time_only 的源只按时间过滤，不匹配关键字
-    这些源通常是关注特定地区的源（如联合早报、路透社China等）
+    Args:
+        keyword: 搜索关键词，多个词用空格分隔
+        match_mode: 'or' = 匹配任意一个词即可（宽松匹配）
+                   'and' = 所有词都必须匹配（严格匹配）
+
+    示例:
+        query_by_keyword("孙卫东 免职") -> 匹配包含"孙卫东"或"免职"的文章
+        query_by_keyword("孙卫东 免职", match_mode='and') -> 必须同时包含两个词
     """
     c = conn or get_conn()
-    like = f"%{keyword}%"
 
-    # time_only 的源（只按时间过滤，不匹配关键字）
-    # 这些源名称包含特定关键词
-    time_only_patterns = [
-        '%联合早报%',
-        '%路透社%China%',
-        '%纽约时报%China%',
-        '%CNN%China%',
-        '%南华早报%',
-        '%德国之声%',
-        '%路透社%Japan%',
-        '%共同社%',
-        '%印度时报%',
-        '%加拿大广播%',
-    ]
+    # 拆分关键词（支持空格分隔的多词搜索）
+    keywords = [kw.strip() for kw in keyword.split() if kw.strip()]
+    if not keywords:
+        keywords = [keyword]
 
-    # 构建 SQL：time_only 的源只按时间，其他源按时间+关键字
-    time_only_sql = ' OR '.join([f"platform LIKE '{p}'" for p in time_only_patterns])
-
-    sql = f"""SELECT * FROM articles WHERE published >= ? AND published <= ?
-              AND (
-                  ({time_only_sql})
-                  OR title LIKE ?
-                  OR summary LIKE ?
-              )"""
+    sql = """SELECT * FROM articles WHERE published >= ? AND published <= ?"""
     params = [start or '1970-01-01', end or '2099-12-31']
 
-    # 关键字参数
-    params.extend([like, like])
+    # 构建关键词匹配条件
+    if len(keywords) == 1:
+        # 单词搜索：原逻辑
+        kw = keywords[0]
+        sql += " AND (title LIKE ? OR summary LIKE ?)"
+        params.extend([f"%{kw}%", f"%{kw}%"])
+    else:
+        # 多词搜索：分词匹配
+        if match_mode == 'or':
+            # OR模式：匹配任意一个词即可
+            title_conditions = " OR ".join([f"title LIKE ?" for _ in keywords])
+            summary_conditions = " OR ".join([f"summary LIKE ?" for _ in keywords])
+            sql += f" AND (({title_conditions}) OR ({summary_conditions}))"
+            params.extend([f"%{kw}%" for kw in keywords])  # title params
+            params.extend([f"%{kw}%" for kw in keywords])  # summary params
+        else:
+            # AND模式：所有词都必须匹配
+            title_conditions = " AND ".join([f"title LIKE ?" for _ in keywords])
+            summary_conditions = " AND ".join([f"summary LIKE ?" for _ in keywords])
+            sql += f" AND (({title_conditions}) OR ({summary_conditions}))"
+            params.extend([f"%{kw}%" for kw in keywords])  # title params
+            params.extend([f"%{kw}%" for kw in keywords])  # summary params
 
     if media_group:
         sql += " AND media_group = ?"
@@ -462,7 +500,6 @@ def get_stats(conn=None):
         "SELECT COUNT(*) FROM articles WHERE published >= ?",
         [week_start]).fetchone()[0]
 
-
     by_media = c.execute(
         "SELECT media_group, COUNT(*) as cnt FROM articles GROUP BY media_group ORDER BY cnt DESC"
     ).fetchall()
@@ -470,11 +507,25 @@ def get_stats(conn=None):
         "SELECT MIN(published) as earliest, MAX(published) as latest FROM articles"
     ).fetchone()
 
+    # 每日抓取数量（最近7天）
+    daily_stats = []
+    for i in range(7):
+        day_start = (datetime.now(TZ_BJ) - timedelta(days=i)).replace(
+            hour=0, minute=0, second=0, microsecond=0).isoformat()
+        day_end = (datetime.now(TZ_BJ) - timedelta(days=i-1)).replace(
+            hour=0, minute=0, second=0, microsecond=0).isoformat()
+        cnt = c.execute(
+            "SELECT COUNT(*) FROM articles WHERE published >= ? AND published < ?",
+            [day_start, day_end]).fetchone()[0]
+        day_date = (datetime.now(TZ_BJ) - timedelta(days=i)).strftime('%m-%d')
+        daily_stats.append({'date': day_date, 'count': cnt})
+
     result = {
         'total': total,
         'today': today,
         'this_week': this_week,
         'by_media': [dict(r) for r in by_media],
+        'daily_stats': daily_stats,
         'earliest': time_range['earliest'] if time_range else None,
         'latest': time_range['latest'] if time_range else None,
     }

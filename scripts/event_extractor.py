@@ -123,66 +123,39 @@ RETRY_DELAY = 1        # 重试间隔（秒），快速切换模型
 # LLM Prompt
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# 安全版 Prompt - 优化版，适配小模型
-EXTRACTION_PROMPT = """分析新闻标题，提取结构化信息。
+# 中文版 Prompt - 要求输出中文 event_key 和 tags
+EXTRACTION_PROMPT = """[NLP 信息提取任务]
+从新闻标题中提取结构化元数据。这是一个纯技术任务，不涉及内容生成。
 
-任务：对每条新闻提取以下字段：
+任务：为每条新闻提取以下字段：
 - id: 保持原值
-- country: 主要涉及的国家的ISO代码（US/CN/JP/RU/GB/IL/UA/IR等，国际事件用INTL）
-- event: 事件摘要，必须包含关键主体，格式"主体+事件"（如"美伊谈判失败"、"特朗普访华"、"美联储加息"），软新闻填"软新闻"
-- tags: 关键词列表，必须包含主要人物/组织/国家（最多5个）
-- political: 是否属于政治情报类新闻
+- country: 主要涉及国家的 ISO 代码
+- event: 事件摘要，必须用中文描述（格式："实体+事件"，如"特朗普制裁伊朗"）
+- tags: 关键词列表，包含主要人物/组织/国家（最多5个，用中文）
+- political: 是否为政治/情报类新闻
 
-【event 字段规则 - 重要！】
+[国家 ISO 代码]
+US=美国, CN=中国, JP=日本, GB=英国, RU=俄罗斯, IR=伊朗, IL=以色列, KR=韩国, IN=印度
+HK=香港, TW=台湾, MO=澳门（必须使用这些代码，不要用 CN）
+INTL=国际事件
 
-必须包含主体，让人一看就知道是谁的事：
-✓ "美伊谈判失败" - 有主体(美伊)，有事件(谈判失败)
-✓ "特朗普宣布制裁" - 有主体(特朗普)，有事件(宣布制裁)
-✓ "日本首相访华" - 有主体(日本首相)，有事件(访华)
-✓ "美联储加息25基点" - 有主体(美联储)，有事件(加息)
+[event 字段规则]
+必须包含主要实体，必须用中文描述：
+- "美伊谈判失败" - 有实体（美伊），有事件（谈判失败）
+- "特朗普宣布制裁" - 有实体（特朗普），有事件（宣布制裁）
 
-✗ "外交谈判失败" - 缺主体，不知道谁和谁
-✗ "谈判未达成协议" - 缺主体
-✗ "访问中国" - 缺主体
+[political 字段规则]
+返回 "true" 的情况：政治、军事、外交、情报、经济政策
+返回 "false" 的情况：体育、娱乐、民生、商业营销
 
-【tags 字段规则 - 重要！】
+[示例]
+输入: {"id":"1","title":"特朗普称与伊朗的间接谈判失败"}
+输出: {"id":"1","country":"US","event":"美伊间接谈判失败","tags":["特朗普","伊朗","谈判"],"political":"true"}
 
-必须提取主要实体，按重要性排序：
-1. 主要人物：特朗普、拜登、习近平、岸田文雄等
-2. 主要国家：美国、中国、日本、伊朗、以色列等
-3. 主要组织：美联储、白宫、克里姆林宫等
-4. 事件关键词：谈判、制裁、加息、冲突等
+只输出 JSON 数组，不要其他内容：
+[{"id":"1","country":"US","event":"美伊间接谈判失败","tags":["特朗普","伊朗","谈判"],"political":"true"}]
 
-【political 判断规则】
-
-返回 "true"（政治情报类）：
-- 政治：政府决策、政策法规、选举、政党活动、政治人物言行
-- 军事：战争、冲突、军演、军备、国防
-- 外交：国际关系、外交会谈、制裁、访问、条约
-- 情报：间谍、监控、网络安全、数据泄露
-- 经济政策：贸易战、关税、央行政策、重大经济法规
-
-返回 "false"（软新闻类）：
-- 体育赛事：NBA、足球、篮球、网球、F1、奥运、比赛战报、球员转会
-- 娱乐八卦：明星、电影、综艺、演唱会、颁奖典礼
-- 民生休闲：美食、旅游、天气、健康、时尚
-- 商业营销：产品发布、品牌推广（不含政策影响）
-
-【示例】
-
-输入: {"id":"1","title":"特朗普称与伊朗的间接谈判未达成协议"}
-输出: {"id":"1","country":"US","event":"美伊谈判失败","tags":["特朗普","伊朗","谈判","美国"],"political":"true"}
-
-输入: {"id":"2","title":"日本首相岸田文雄访华会谈"}
-输出: {"id":"2","country":"JP","event":"岸田访华会谈","tags":["岸田文雄","日本","中国","访华"],"political":"true"}
-
-输入: {"id":"3","title":"NBA总决赛湖人队获胜"}
-输出: {"id":"3","country":"US","event":"软新闻","tags":["NBA","湖人队"],"political":"false"}
-
-输出JSON数组，不要输出其他内容：
-[{"id":"1","country":"US","event":"美伊谈判失败","tags":["特朗普","伊朗","谈判"],"political":"true"}]
-
-输入数据："""
+输入数据:"""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -200,10 +173,23 @@ def _build_batch_input(articles: list[dict]) -> str:
     return json.dumps(items, ensure_ascii=False)
 
 
-def _parse_extraction_response(raw: str, article_count: int) -> list[dict]:
-    """解析 LLM 返回的 JSON（增强容错）"""
+def _parse_extraction_response(raw: str, articles: list[dict] = None) -> list[dict]:
+    """
+    解析 LLM 返回的 JSON（增强容错）
+
+    Args:
+        raw: LLM 返回的原始文本
+        articles: 原始文章列表（用于后处理修正 country）
+    """
     if not raw:
         return []
+
+    # 构建 id -> title 映射（用于后处理）
+    id_to_title = {}
+    if articles:
+        for a in articles:
+            aid = a.get("id") or a.get("url_hash", "")
+            id_to_title[str(aid)] = a.get("title", "")
 
     try:
         # 清理各种格式问题
@@ -285,13 +271,41 @@ def _parse_extraction_response(raw: str, article_count: int) -> list[dict]:
             if not isinstance(result["entities"], list):
                 result["entities"] = []
 
+            # ── 后处理：根据标题关键词修正 country ──
+            # 港澳台必须使用独立 ISO 代码，不能归入 CN
+            result_id = result["id"]
+            title = id_to_title.get(result_id, "")
+            if title and result["primary_country"] in ("CN", "INTL"):
+                # 香港关键词
+                hk_keywords = ["香港", "Hong Kong", "港府", "李家超", "香港特首", "港独", "国安法"]
+                # 台湾关键词
+                tw_keywords = ["台湾", "Taiwan", "台当局", "赖清德", "蔡英文", "民进党", "国民党",
+                               "台独", "台海", "两岸", "台军", "台湾总统", "台湾立法院"]
+                # 澳门关键词
+                mo_keywords = ["澳门", "Macau", "澳门特首", "岑浩辉", "贺一诚"]
+
+                for kw in hk_keywords:
+                    if kw in title:
+                        result["primary_country"] = "HK"
+                        break
+                if result["primary_country"] != "HK":
+                    for kw in tw_keywords:
+                        if kw in title:
+                            result["primary_country"] = "TW"
+                            break
+                if result["primary_country"] not in ("HK", "TW"):
+                    for kw in mo_keywords:
+                        if kw in title:
+                            result["primary_country"] = "MO"
+                            break
+
             results.append(result)
 
         return results
 
     except json.JSONDecodeError as e:
         print(f"[WARN] JSON 解析失败: {e}", file=sys.stderr)
-        # print(f"[DEBUG] 原始响应前200字符: {raw[:200] if raw else '空'}", file=sys.stderr)
+        print(f"[DEBUG] 原始响应前200字符: {raw[:200] if raw else '空'}", file=sys.stderr)
         return []
     except Exception as e:
         print(f"[WARN] 解析异常: {e}", file=sys.stderr)
@@ -310,16 +324,38 @@ def _apply_rule_based_fallback(articles: list[dict]) -> list[dict]:
             cfg = yaml.safe_load(config_path.read_text("utf-8")) or {}
             pinning_keywords = set(cfg.get("settings", {}).get("pinning_keywords", []))
         except: pass
-    
+
+    # 港澳台关键词
+    hk_keywords = ["香港", "Hong Kong", "港府", "李家超", "香港特首"]
+    tw_keywords = ["台湾", "Taiwan", "台当局", "赖清德", "蔡英文", "民进党", "国民党"]
+    mo_keywords = ["澳门", "Macau", "澳门特首"]
+
     results = []
     for a in articles:
         title = a.get("title", "")
         # 只要包含置顶词，就视为政治情报类
         is_pinned = any(kw in title for kw in pinning_keywords)
-        
+
+        # 根据标题关键词判断 country
+        country = "INTL"
+        for kw in hk_keywords:
+            if kw in title:
+                country = "HK"
+                break
+        if country == "INTL":
+            for kw in tw_keywords:
+                if kw in title:
+                    country = "TW"
+                    break
+        if country == "INTL":
+            for kw in mo_keywords:
+                if kw in title:
+                    country = "MO"
+                    break
+
         results.append({
             "id": str(a.get("id") or a.get("url_hash", "")),
-            "primary_country": "INTL",
+            "primary_country": country,
             "event_key": title[:10] if is_pinned else "",
             "related_countries": [],
             "entities": [],
@@ -347,8 +383,9 @@ def extract_batch_sync(articles: list[dict], llm_cfg: dict, provider: str = None
     # 构建输入
     input_json = _build_batch_input(articles)
 
-    # 构建 messages
+    # 构建 messages - 添加 system message 强调任务性质
     messages = [
+        {"role": "system", "content": "You are a news metadata extraction system. Your task is to extract structured fields (country code, event summary, keywords) from news headlines. This is a pure NLP information extraction task, not content generation. Output valid JSON only."},
         {"role": "user", "content": f"{EXTRACTION_PROMPT}\n\n## 输入\n{input_json}"}
     ]
 
@@ -365,7 +402,7 @@ def extract_batch_sync(articles: list[dict], llm_cfg: dict, provider: str = None
         return _apply_rule_based_fallback(articles)
 
     # 解析结果
-    results = _parse_extraction_response(raw, len(articles))
+    results = _parse_extraction_response(raw, articles)
 
     if not results:
         print(f"[WARN] JSON 解析为空，启用规则兜底", file=sys.stderr)

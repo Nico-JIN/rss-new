@@ -231,21 +231,30 @@ async function loadDashboard() {
     document.getElementById('statWeek').textContent = stats.this_week?.toLocaleString() || '0';
     document.getElementById('statLastFetch').textContent =
         fmtTime(fetchStatus.scheduler?.last_run);
-    
+
+    // 计算日均抓取量（近7天）
+    const dailyStats = stats.daily_stats || [];
+    const total7Days = dailyStats.reduce((sum, d) => sum + (d.count || 0), 0);
+    const dailyAvg = dailyStats.length > 0 ? Math.round(total7Days / 7) : 0;
+    document.getElementById('statDailyAvg').textContent = dailyAvg?.toLocaleString() || '0';
+
     // 下次运行显示
     const nextRunDt = fetchStatus.scheduler?.next_run;
     const nextReason = fetchStatus.scheduler?.next_run_reason || '常规间隔';
     const nextEl = document.getElementById('statNextFetch');
     if (nextEl) {
-        nextEl.innerHTML = fmtTime(nextRunDt) + 
+        nextEl.innerHTML = fmtTime(nextRunDt) +
             (nextReason.includes('补位') ? ` <span class="badge-reason badge-padding">小时补位</span>` : '');
     }
 
     // 进度处理
     updateProgressUI(fetchStatus.scheduler);
-    
-    // 媒体图表
+
+    // 媒体图表（只显示前20个）
     renderMediaChart(stats.by_media || []);
+
+    // 每日抓取图表
+    renderDailyChart(dailyStats);
 
     // 最近抓取
     const list = document.getElementById('recentFetchList');
@@ -1036,6 +1045,9 @@ function renderMediaChart(data) {
     const ctx = document.getElementById('mediaChart');
     if (mediaChart) mediaChart.destroy();
 
+    // 只显示前20个媒体
+    const top20 = data.slice(0, 20);
+
     const colors = [
         '#6366f1','#818cf8','#a5b4fc','#22c55e','#4ade80',
         '#f59e0b','#fbbf24','#ef4444','#f87171','#06b6d4',
@@ -1045,10 +1057,10 @@ function renderMediaChart(data) {
     mediaChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: data.map(d => d.media_group || '未分类'),
+            labels: top20.map(d => d.media_group || '未分类'),
             datasets: [{
-                data: data.map(d => d.cnt),
-                backgroundColor: data.map((_, i) => colors[i % colors.length]),
+                data: top20.map(d => d.cnt),
+                backgroundColor: top20.map((_, i) => colors[i % colors.length]),
                 borderRadius: 6,
                 borderSkipped: false,
                 maxBarThickness: 40,  // 防止只有 1 个源时柱子太粗
@@ -1088,6 +1100,30 @@ function renderMediaChart(data) {
             }
         }
     });
+}
+
+function renderDailyChart(data) {
+    const container = document.getElementById('dailyStatsCards');
+    if (!container) return;
+
+    // 数据按日期正序排列（从旧到新）
+    const sortedData = [...data].reverse();
+    const maxVal = Math.max(...sortedData.map(d => d.count), 1);
+    const todayDate = new Date().toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }).replace('/', '-');
+
+    container.innerHTML = sortedData.map(d => {
+        const isToday = d.date === todayDate;
+        const pct = Math.round((d.count / maxVal) * 100);
+        return `
+            <div class="daily-stat-card ${isToday ? 'today-card' : ''}">
+                <div class="date">${d.date}</div>
+                <div class="count ${isToday ? 'today' : ''}">${d.count}</div>
+                <div class="bar">
+                    <div class="bar-fill" style="width: ${pct}%"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 // ── 调度器状态轮询 ────────────────────────────────────────
@@ -1172,6 +1208,7 @@ async function loadFeeds() {
                                     <div class="feed-item" onclick="editFeed(${f._idx})">
                                         <span class="feed-platform">${escHtml(f.platform)}</span>
                                         <span class="feed-group">${escHtml(f.media_group || '-')}</span>
+                                        ${f.scrape_url && f.scrape_url.trim() ? `<a class="feed-link" href="${f.scrape_url}" target="_blank" title="访问媒体官网" onclick="event.stopPropagation();">🔗</a>` : ''}
                                         <button class="feed-delete" onclick="event.stopPropagation(); deleteFeed(${f._idx})">×</button>
                                     </div>
                                 `).join('')}
@@ -1532,22 +1569,36 @@ async function doSearch() {
     const country = document.getElementById('searchCountry').value;
     const period = document.getElementById('searchPeriod').value;
     const hours = document.getElementById('searchHours').value;
+    const smartSearch = document.getElementById('smartSearch').checked;
     const limit = 30;
 
     let params = `limit=${limit}&page=${searchPage}`;
-    if (keyword) params += `&keyword=${encodeURIComponent(keyword)}`;
     if (media) params += `&media=${encodeURIComponent(media)}`;
     if (platform) params += `&platform=${encodeURIComponent(platform)}`;
     if (country) params += `&country=${encodeURIComponent(country)}`;
     if (period) params += `&period=${period}`;
     if (hours) params += `&hours=${hours}`;
 
-    const data = await api(`/api/articles?${params}`);
+    let data;
+    if (keyword && smartSearch) {
+        // 智能搜索
+        params += `&query=${encodeURIComponent(keyword)}`;
+        data = await api(`/api/articles/smart-search?${params}`);
+        // 显示使用的关键词
+        if (data.keywords_used && data.keywords_used.length > 0) {
+            document.getElementById('resultCount').innerHTML =
+                `智能搜索关键词: <span style="color:var(--accent);">${data.keywords_used.join(', ')}</span> — 共 ${data.total || 0} 条结果`;
+        }
+    } else {
+        // 普通搜索
+        if (keyword) params += `&keyword=${encodeURIComponent(keyword)}`;
+        data = await api(`/api/articles?${params}`);
+        document.getElementById('resultCount').textContent =
+            `共 ${data.total || 0} 条结果，当前第 ${data.page || 1} 页`;
+    }
+
     const list = document.getElementById('articlesList');
     const items = data.items || [];
-
-    document.getElementById('resultCount').textContent =
-        `共 ${data.total || 0} 条结果，当前第 ${data.page || 1} 页`;
 
     // 存入全局变量以便模态框读取
     window.currentArticles = items;
@@ -1694,6 +1745,119 @@ function showLogDetail(jsonStr) {
 }
 
 document.getElementById('btnRefreshLogs').onclick = loadLogs;
+
+// ── 原文补抓 ─────────────────────────────────────────────
+
+async function loadBackfillStats() {
+    try {
+        const stats = await api('/api/backfill/stats?days=7');
+        document.getElementById('backfillMissing').textContent = stats.missing_original_count || 0;
+    } catch (e) {
+        console.error('加载补抓统计失败:', e);
+    }
+}
+
+async function loadBackfillLogs() {
+    try {
+        const data = await api('/api/backfill/logs?limit=20');
+        const tbody = document.querySelector('#backfillLogsTable tbody');
+        const logs = data.logs || [];
+
+        if (!logs.length) {
+            tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">暂无补抓记录</div></td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = logs.map(l => `
+            <tr>
+                <td>${fmtTime(l.started_at)}</td>
+                <td><span class="badge ${l.trigger_type === 'manual' ? 'badge-manual' : 'badge-scheduled'}">${l.trigger_type === 'manual' ? '手动' : '定时'}</span></td>
+                <td><span class="status-tag ${l.status}">${l.status === 'success' ? '成功' : '失败'}</span></td>
+                <td>${l.duration_seconds ? l.duration_seconds + '秒' : '—'}</td>
+                <td style="color:var(--accent-2);font-weight:600">${l.success_count || 0}</td>
+                <td style="color:var(--danger);">${l.failed_count || 0}</td>
+                <td style="color:var(--muted);">${l.skipped_count || 0}</td>
+                <td><button class="btn btn-sm btn-secondary" onclick='showBackfillDetail(${JSON.stringify(JSON.stringify(l))})'>详情</button></td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.error('加载补抓日志失败:', e);
+    }
+}
+
+window.runBackfill = async function() {
+    const btn = document.getElementById('btnRunBackfill');
+    const progress = document.getElementById('backfillProgress');
+    const progressText = document.getElementById('backfillProgressText');
+
+    if (btn.disabled) return;
+
+    const days = document.getElementById('backfillDays').value;
+    const limit = document.getElementById('backfillLimit').value;
+
+    btn.disabled = true;
+    btn.innerHTML = '⏳ 执行中...';
+    progress.style.display = 'block';
+    progressText.textContent = '正在启动补抓任务...';
+
+    try {
+        await api('/api/backfill/execute', {
+            method: 'POST',
+            body: JSON.stringify({ days: parseInt(days), limit: parseInt(limit) })
+        });
+
+        // 轮询状态
+        let running = true;
+        while (running) {
+            await new Promise(r => setTimeout(r, 2000));
+            const status = await api('/api/backfill/status');
+            running = status.is_running;
+            if (status.progress) {
+                progressText.textContent = status.progress;
+            }
+        }
+
+        // 完成，刷新日志
+        progressText.textContent = '补抓完成！';
+        await loadBackfillLogs();
+        await loadBackfillStats();
+
+    } catch (e) {
+        progressText.textContent = '错误: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '▶️ 执行补抓';
+        setTimeout(() => { progress.style.display = 'none'; }, 3000);
+    }
+};
+
+function showBackfillDetail(jsonStr) {
+    const detail = JSON.parse(jsonStr);
+    document.getElementById('detailTitle').textContent = `补抓详情 — ${fmtTime(detail.started_at)}`;
+
+    // 格式化显示
+    let content = {
+        '时间范围': `${detail.days_back} 天`,
+        '总文章数': detail.total_articles,
+        '成功': detail.success_count,
+        '失败': detail.failed_count,
+        '跳过': detail.skipped_count,
+        '耗时': `${detail.duration_seconds} 秒`,
+        '按方法': detail.by_method,
+        '按平台': detail.by_platform
+    };
+
+    document.getElementById('detailContent').textContent = JSON.stringify(content, null, 2);
+    document.getElementById('detailModal').classList.add('active');
+}
+
+// 在 loadLogs 时同时加载补抓数据
+const originalLoadLogs = loadLogs;
+loadLogs = async function() {
+    await originalLoadLogs();
+    await loadBackfillStats();
+    await loadBackfillLogs();
+};
 
 // ── 数据维护 ─────────────────────────────────────────────
 async function loadDbStats() {
