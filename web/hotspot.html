@@ -1536,12 +1536,24 @@
             const provider = document.getElementById('hotspotProvider').value;
             const maxResults = categoriesConfig[categoryId]?.max_results || 15;
 
-            const panel = document.getElementById(`panel-${categoryId}`);
-            const list = panel.querySelector('.hotspot-list');
+            // 国际热点有特殊面板结构
+            let panel, list;
+            if (categoryId === 'international') {
+                panel = document.querySelector('.international-panel');
+                list = document.getElementById('internationalList');
+            } else {
+                panel = document.getElementById(`panel-${categoryId}`);
+                list = panel ? panel.querySelector('.hotspot-list') : null;
+            }
+
+            if (!list) {
+                console.error('[前端] 未找到列表容器:', categoryId);
+                return;
+            }
 
             // 立即显示执行状态
             list.innerHTML = '<div class="hotspot-empty"><div class="hotspot-empty-icon">⏳</div><div>正在执行热点检测...</div></div>';
-            panel.classList.add('refreshing');
+            if (panel) panel.classList.add('refreshing');
 
             try {
                 console.log(`[前端] 开始执行: ${categoryId}, provider=${provider}`);
@@ -1553,7 +1565,11 @@
 
                 // 等待一下再刷新
                 await new Promise(r => setTimeout(r, 500));
-                await loadCategoryHotspots(categoryId, hours);
+                if (categoryId === 'international') {
+                    await loadInternationalHotspots();
+                } else {
+                    await loadCategoryHotspots(categoryId, hours);
+                }
                 await loadCategories(); // 更新最后执行时间
 
             } catch (error) {
@@ -1561,7 +1577,7 @@
                 list.innerHTML = '<div class="hotspot-empty"><div class="hotspot-empty-icon">❌</div><div>执行失败: ' + error.message + '</div></div>';
             }
 
-            panel.classList.remove('refreshing');
+            if (panel) panel.classList.remove('refreshing');
         }
 
         async function refreshAll() {
